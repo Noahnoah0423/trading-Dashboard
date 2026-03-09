@@ -265,11 +265,23 @@ def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=
         "format": "json",
     }
     
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "application/json"
+    }
+    
     try:
-        response = requests.get(endpoint, params=params, timeout=10)
+        # Streamlit Cloud 환경에서의 네트워크 지연 및 방화벽 차단을 방지하기 위해 Session과 헤더 사용
+        session = requests.Session()
+        response = session.get(endpoint, params=params, headers=headers, timeout=15)
         response.raise_for_status()
-        data = response.json()
         
+        # 일부 GDELT API 응답이 text/html로 올 수 있는 경우 대비
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            return f"GDELT API Format Error: 서버가 JSON 형식이 아닌 데이터를 반환했습니다. (응답 코드: {response.status_code})"
+            
         articles = data.get("articles", [])
         
         results = []
