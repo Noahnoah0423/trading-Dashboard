@@ -176,7 +176,7 @@ def load_insider_data(ticker):
 
 
 @st.cache_data(ttl=3600, show_spinner=True)
-def load_intelligence_feed(api_key):
+def load_intelligence_feed(api_key, bypass_cache=False):
     """GDELT 뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (1시간 갱신)"""
     raw_news = get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis", "War"], max_results=30)
     if not raw_news:
@@ -468,7 +468,9 @@ elif menu == "Intelligence Feed":
                 load_intelligence_feed.clear()
         
         with st.spinner("Analyzing global intelligence (superforecasting in progress)..."):
-            feed_data = load_intelligence_feed(gemini_api_key)
+            # Time-based bypass to force cloud to drop old empty cache right now
+            force_refresh = datetime.now().strftime("%H")
+            feed_data = load_intelligence_feed(gemini_api_key, bypass_cache=force_refresh)
             
         if isinstance(feed_data, str):
             st.error(f"🚨 인텔리전스 피드 로딩 오류: {feed_data}")
