@@ -10,6 +10,8 @@ import yfinance as yf
 import pandas as pd
 from typing import Dict, List, Any
 import requests
+import json
+import urllib.parse
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +244,128 @@ def get_insider_trading_data(ticker_symbol: str) -> pd.DataFrame:
     except Exception as e:
         print(f"[WARNING] {ticker_symbol} 내부자 거래 데이터 수집 실패: {e}")
         return pd.DataFrame()
+
+
+# ---------------------------------------------------------------------------
+# 6) GDELT & Gemini Intelligence Feed 관련
+# ---------------------------------------------------------------------------
+
+def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=20):
+    """
+    Query the GDELT 2.0 DOC API for recent news containing specific keywords.
+    """
+    endpoint = "https://api.gdeltproject.org/api/v2/doc/doc"
+    query_str = " OR ".join(f'"{kw}"' for kw in keywords)
+    query_str += ' sourcelang:eng'
+    
+    params = {
+        "query": query_str,
+        "mode": "artlist",
+        "maxrecords": max_results,
+        "format": "json",
+    }
+    
+    try:
+        response = requests.get(endpoint, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        articles = data.get("articles", [])
+        
+        results = []
+        seen_urls = set()
+        
+        for art in articles:
+            url = art.get("url")
+            if not url or url in seen_urls:
+                continue
+                
+            seen_urls.add(url)
+            
+            results.append({
+                "title": art.get("title", "No Title"),
+                "url": url,
+                "domain": art.get("domain", "Unknown"),
+                "seendate": art.get("seendate", "")
+            })
+            
+        return results
+
+    except Exception as e:
+        print(f"Error fetching GDELT data: {e}")
+        return []
+
+def analyze_news_with_gemini(news_list, api_key):
+    """
+    Gemini 1.5 Flash를 사용하여 뉴스의 투자 중요도를 필터링 (Superforecasting 원칙).
+    """
+    if not api_key:
+        return []
+        
+    if not news_list:
+        return []
+
+    from google import genai
+    client = genai.Client(api_key=api_key)
+    
+    # Batch Prompt 구성
+    news_text = ""
+    for idx, news in enumerate(news_list):
+        news_text += f"[{idx}] Title: {news['title']}\n"
+        
+    prompt = f"""
+    You are a hedge fund lead analyst and superforecasting expert. 
+    Review the following news headlines. For each headline, evaluate the probability (0-100) that this news will cause a significant, tradable movement in broad asset prices (equities, bonds, commodities) within the next 1 week.
+    Apply Philip Tetlock's Superforecasting principles: weight evidence precisely, remove political bias, ignore pure noise.
+    
+    Filter out any news that scores below 70. 
+    
+    Output strictly valid JSON with no markdown formatting or extra text. The JSON format must be a list of objects like this:
+    [
+      {{
+        "index": <integer corresponding to the news item index>,
+        "score": <integer 70-100>,
+        "investment_angle": "<one sentence concise investment angle/insight>"
+      }}
+    ]
+    
+    Here are the news headlines:
+    {news_text}
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model='gemini-1.5-flash',
+            contents=prompt,
+        )
+        text_resp = response.text.strip()
+        
+        # Clean potential markdown wrappers
+        if text_resp.startswith("```json"):
+            text_resp = text_resp[7:]
+        if text_resp.startswith("```"):
+            text_resp = text_resp[3:]
+        if text_resp.endswith("```"):
+            text_resp = text_resp[:-3]
+            
+        filtered_indices = json.loads(text_resp.strip())
+        
+        # Map back to original list
+        analyzed_news = []
+        for item in filtered_indices:
+            idx = item.get("index")
+            if 0 <= idx < len(news_list):
+                original_news = news_list[idx]
+                original_news["score"] = item.get("score", 0)
+                original_news["investment_angle"] = item.get("investment_angle", "")
+                analyzed_news.append(original_news)
+                
+        # Sort by score descending
+        return sorted(analyzed_news, key=lambda x: x["score"], reverse=True)
+        
+    except Exception as e:
+        print(f"Gemini Analysis Error: {e}")
+        return []
 
 
 # ---------------------------------------------------------------------------

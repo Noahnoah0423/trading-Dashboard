@@ -22,7 +22,9 @@ from data_fetcher import (
     get_short_squeeze_data,
     get_correlation_data,
     get_money_flow_data,
-    get_insider_trading_data
+    get_insider_trading_data,
+    get_gdelt_news,
+    analyze_news_with_gemini
 )
 from risk_analyzer import calculate_market_risk
 
@@ -173,6 +175,15 @@ def load_insider_data(ticker):
     return get_insider_trading_data(ticker)
 
 
+@st.cache_data(ttl=3600, show_spinner=True)
+def load_intelligence_feed(api_key):
+    """GDELT 뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (1시간 갱신)"""
+    raw_news = get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis", "War"], max_results=30)
+    if not raw_news:
+        return []
+    analyzed_news = analyze_news_with_gemini(raw_news, api_key)
+    return analyzed_news
+
 # ===========================================================================
 # 사이드바 (Sidebar) 메뉴 구성
 # ===========================================================================
@@ -181,13 +192,22 @@ st.sidebar.markdown("---")
 
 menu = st.sidebar.radio(
     "📋 Navigation",
-    options=["Overview", "M3 Short Squeeze", "M6 Correlation", "M8 Inst. Flow", "Insider Trading"],
+    options=["Overview", "Intelligence Feed", "M3 Short Squeeze", "M6 Correlation", "M8 Inst. Flow", "Insider Trading"],
     index=0,
 )
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("#### ⚙️ Settings")
 av_api_key = st.sidebar.text_input("Alpha Vantage API Key", type="password", help="yfinance 장애 시 매크로 데이터 백업용 (옵션)")
+
+# Streamlit Secrets에서 Gemini API 키 확인 (클라우드 배포용)
+gemini_api_key = ""
+if "GEMINI_API_KEY" in st.secrets:
+    gemini_api_key = st.secrets["GEMINI_API_KEY"]
+else:
+    # 로컬 테스트용 폴백 (secrets.toml 설정 전)
+    gemini_api_key = st.sidebar.text_input("Gemini API Key (Local Setup)", type="password", help="secrets.toml이 없을 때 표시됩니다.")
+
 auto_refresh = st.sidebar.checkbox("Auto Refresh (1hr)", value=True)
 show_debug = st.sidebar.checkbox("Debug Mode", value=False)
 st.sidebar.markdown("---")
@@ -425,6 +445,67 @@ if menu == "Overview":
 
     summary_df = pd.DataFrame(summary_rows)
     st.table(summary_df)
+
+
+elif menu == "Intelligence Feed":
+    # -------------------------------------------------------------------
+    # Intelligence Feed 탭 (GDELT + Gemini 요약)
+    # -------------------------------------------------------------------
+    st.markdown("### 🧠 Intelligence Feed (GDELT + Gemini 1.5 Flash)")
+    st.markdown(
+        "<p style='color: #6b7688;'>GDELT 실시간 뉴스에 «슈퍼포어캐스팅» 원칙을 적용하여 "
+        "단기 시장 변동성을 촉발할 가능성이 높은 뉴스를 선별합니다.</p>",
+        unsafe_allow_html=True,
+    )
+    
+    if not gemini_api_key:
+        st.warning("⚠️ 백엔드 환경에 **Gemini API Key**가 설정되지 않았습니다. (.streamlit/secrets.toml 또는 Streamlit Cloud Secrets에 `GEMINI_API_KEY`를 추가해주세요.)")
+    else:
+        # 수동 갱신 버튼
+        col_btn, _ = st.columns([1, 4])
+        with col_btn:
+            if st.button("🔄 Refresh Feed"):
+                load_intelligence_feed.clear()
+        
+        with st.spinner("Analyzing global intelligence (superforecasting in progress)..."):
+            feed_data = load_intelligence_feed(gemini_api_key)
+            
+        if not feed_data:
+            st.info("최근 24시간 내 유의미한 거시/지정학 이벤트가 감지되지 않았거나 데이터 수집 중 오류가 발생했습니다.")
+        else:
+            for item in feed_data:
+                score = item.get("score", 0)
+                
+                # 점수 90 이상은 CRITICAL 표시
+                is_critical = score >= 90
+                
+                border_color = "#ff4444" if is_critical else "#2d3548"
+                bg_color = "#3d0a0a" if is_critical else "#1a1f2e"
+                
+                st.markdown(
+                    f"""
+                    <div style='background-color: {bg_color}; padding: 15px; border-radius: 8px; border: 1px solid {border_color}; margin-bottom: 20px;'>
+                        <div style='display: flex; justify-content: space-between; align-items: center;'>
+                            <h4 style='margin: 0; color: #ffffff;'>
+                                {'🚨 <b>[CRITICAL]</b>' if is_critical else '📰'} 
+                                <a href='{item.get("url", "#")}' style='color: #ffffff; text-decoration: none;' target='_blank'>
+                                    {item.get("title", "No Title")}
+                                </a>
+                            </h4>
+                            <span style='background-color: {border_color}; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: bold;'>
+                                Score: {score}
+                            </span>
+                        </div>
+                        <p style='margin-top: 5px; color: #8892a4; font-size: 0.85rem;'>
+                            Source: {item.get("domain", "Unknown")} | Date: {item.get("seendate", "")[:8]}
+                        </p>
+                        <p style='margin-top: 10px; margin-bottom: 0px; font-size: 1.05rem;'>
+                            <strong style='color: #00d4aa;'>💡 Investment Angle:</strong> {item.get("investment_angle", "N/A")}
+                        </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
 
 elif menu == "M3 Short Squeeze":
