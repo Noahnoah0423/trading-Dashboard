@@ -356,8 +356,9 @@ def analyze_news_with_gemini(news_list, api_key):
     if not news_list:
         return []
 
-    from google import genai
-    client = genai.Client(api_key=api_key)
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-1.5-flash")
     
     # Batch Prompt 구성
     news_text = ""
@@ -385,33 +386,33 @@ def analyze_news_with_gemini(news_list, api_key):
     """
     
     try:
-        response = client.models.generate_content(
-            model='gemini-1.5-flash',
-            contents=prompt,
+        # JSON 모드 명시적 설정 (버전 호환성 확인)
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+            )
         )
+        
         text_resp = response.text.strip()
+        analysis_results = json.loads(text_resp)
         
-        # Clean potential markdown wrappers
-        if text_resp.startswith("```json"):
-            text_resp = text_resp[7:]
-        if text_resp.startswith("```"):
-            text_resp = text_resp[3:]
-        if text_resp.endswith("```"):
-            text_resp = text_resp[:-3]
-            
-        filtered_indices = json.loads(text_resp.strip())
-        
-        # Map back to original list
+        # 원본 뉴스 리스트와 결합
         analyzed_news = []
-        for item in filtered_indices:
-            idx = item.get("index")
-            if 0 <= idx < len(news_list):
-                original_news = news_list[idx]
-                original_news["score"] = item.get("score", 0)
-                original_news["investment_angle"] = item.get("investment_angle", "")
-                analyzed_news.append(original_news)
-                
-        # Sort by score descending
+        for res in analysis_results:
+            idx = res.get("index")
+            if idx is not None and 0 <= idx < len(news_list):
+                original = news_list[idx]
+                analyzed_news.append({
+                    "title": original["title"],
+                    "url": original["url"],
+                    "domain": original["domain"],
+                    "date": original.get("date", original.get("seendate", "Unknown")),
+                    "score": res.get("score", 0),
+                    "investment_angle": res.get("investment_angle", "No insight provided.")
+                })
+        
+        # Score 기준 내림차순 정렬
         return sorted(analyzed_news, key=lambda x: x["score"], reverse=True)
         
     except Exception as e:
