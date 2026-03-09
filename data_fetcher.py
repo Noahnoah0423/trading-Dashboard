@@ -362,7 +362,7 @@ def analyze_news_with_gemini(news_list, api_key):
 
     import google.generativeai as genai
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.0-flash")
     
     # Batch Prompt 구성
     news_text = ""
