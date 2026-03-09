@@ -224,7 +224,7 @@ def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
         """
         
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash-preview-001",
             contents=prompt,
         )
         return response.text
@@ -562,7 +562,7 @@ def analyze_news_with_gemini(news_list, api_key):
     
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-preview-001",
             contents=prompt,
             config={
                 "response_mime_type": "application/json",
