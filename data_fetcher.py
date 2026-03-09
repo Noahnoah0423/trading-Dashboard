@@ -270,6 +270,32 @@ def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=
         "Accept": "application/json"
     }
     
+    def fetch_yahoo_rss_fallback():
+        """GDELT Rate Limit (429) 시 Yahoo Finance RSS를 대안으로 사용"""
+        print("[INFO] GDELT API 차단 감지. Yahoo Finance RSS Fallback 작동...")
+        import xml.etree.ElementTree as ET
+        rss_url = "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,TLT,GLD,USO&region=US&lang=en-US"
+        try:
+            rss_resp = requests.get(rss_url, headers=headers, timeout=10)
+            if rss_resp.status_code == 200:
+                root = ET.fromstring(rss_resp.content)
+                fallback_results = []
+                items = list(root.findall('./channel/item'))
+                for item in items[:max_results]:
+                    title = item.find('title').text if item.find('title') is not None else "No Title"
+                    link = item.find('link').text if item.find('link') is not None else "#"
+                    pubDate = item.find('pubDate').text if item.find('pubDate') is not None else "Unknown Date"
+                    fallback_results.append({
+                        "title": title,
+                        "url": link,
+                        "domain": "finance.yahoo.com",
+                        "date": pubDate
+                    })
+                return fallback_results
+        except Exception as e:
+            print(f"[WARNING] Yahoo RSS Fallback 실패: {e}")
+        return None
+    
     try:
         # Streamlit Cloud 환경에서의 네트워크 지연 및 방화벽 차단을 방지하기 위해 Session과 헤더 사용
         session = requests.Session()
