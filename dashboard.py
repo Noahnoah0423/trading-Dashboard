@@ -155,9 +155,9 @@ st.markdown("""
 # ===========================================================================
 # 데이터 캐싱 (st.cache_data - 최신 호환)
 # ===========================================================================
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=43200, show_spinner=True)
 def load_macro_data(av_api_key=""):
-    """매크로 시장 데이터 캐싱 로드 (1시간 갱신)"""
+    """매크로 시장 데이터 캐싱 로드 (12시간 갱신)"""
     return get_macro_data(av_api_key)
 
 
@@ -203,16 +203,16 @@ def load_liquidity_data():
     }
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=43200, show_spinner=True)
 def load_gemini_25_market_report(macro_data, news_data, liquidity_data, gemini_api_key):
-    """Gemini 2.5 Flash 기반 투자 조언 캐싱 (1시간 갱신)"""
+    """Gemini 2.5 Flash 기반 투자 조언 캐싱 (12시간 갱신)"""
     from data_fetcher import get_ai_market_advice
     return get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key)
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=43200, show_spinner=True)
 def load_intelligence_feed(api_key, bypass_cache=False):
-    """GDELT 뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (1시간 갱신)"""
+    """GDELT 뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (12시간 갱신)"""
     raw_news = get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis", "War"], max_results=30)
     
     # 에러 문자열이 반환된 경우 UI로 그대로 전달
@@ -249,7 +249,7 @@ else:
     # 로컬 테스트용 폴백 (secrets.toml 설정 전)
     gemini_api_key = st.sidebar.text_input("Gemini API Key (Local Setup)", type="password", help="secrets.toml이 없을 때 표시됩니다.")
 
-auto_refresh = st.sidebar.checkbox("Auto Refresh (1hr)", value=True)
+auto_refresh = st.sidebar.checkbox("Auto Refresh (12hr)", value=True)
 if st.sidebar.button("🔄 Force Clear Cache"):
     st.cache_data.clear()
     # Streamlit 버전에 따른 리런 처리 (1.27.0+ 에서는 st.rerun() 권장)
