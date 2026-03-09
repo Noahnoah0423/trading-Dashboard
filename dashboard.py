@@ -252,7 +252,11 @@ else:
 auto_refresh = st.sidebar.checkbox("Auto Refresh (1hr)", value=True)
 if st.sidebar.button("🔄 Force Clear Cache"):
     st.cache_data.clear()
-    st.experimental_rerun()
+    # Streamlit 버전에 따른 리런 처리 (1.27.0+ 에서는 st.rerun() 권장)
+    try:
+        st.rerun()
+    except AttributeError:
+        st.experimental_rerun()
 show_debug = st.sidebar.checkbox("Debug Mode", value=False)
 st.sidebar.markdown("---")
 st.sidebar.text(f"🕐 Last Update: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
