@@ -179,8 +179,14 @@ def load_insider_data(ticker):
 def load_intelligence_feed(api_key, bypass_cache=False):
     """GDELT 뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (1시간 갱신)"""
     raw_news = get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis", "War"], max_results=30)
+    
+    # 에러 문자열이 반환된 경우 UI로 그대로 전달
+    if isinstance(raw_news, str):
+        return raw_news
+        
     if not raw_news:
         return []
+        
     analyzed_news = analyze_news_with_gemini(raw_news, api_key)
     return analyzed_news
 
