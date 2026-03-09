@@ -60,10 +60,14 @@ st.markdown("""
         background: linear-gradient(135deg, #1a1f2e 0%, #252b3b 100%);
         border: 1px solid #2d3548;
         border-radius: 12px;
-        padding: 18px 22px;
+        padding: 20px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         text-align: center;
         margin-bottom: 10px;
+        min-height: 180px; /* 고정 최소 높이로 정렬 유지 */
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
     .metric-card .label {
         color: #8892a4;

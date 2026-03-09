@@ -130,17 +130,21 @@ def get_us_market_status() -> Dict[str, str]:
 def get_tga_data() -> Dict[str, Any]:
     """미 재무부 일반 계정(TGA) 잔고 데이터를 가져옵니다."""
     try:
-        url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/dts_table_1?filter=record_date:gte:2024-01-01&sort=-record_date&fields=record_date,close_today_bal&page[size]=100"
+        # TGA Balance: Operating Cash Balance (Treasury General Account)
+        url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/dts_table_1?sort=-record_date&page[size]=200"
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(url, headers=headers, timeout=10)
         data = resp.json()
-        if "data" in data and len(data["data"]) > 0:
-            latest = data["data"][0]
-            # 최근 20개 데이터로 리스트 생성 (차트용)
-            history = [{"date": d["record_date"], "value": float(d["close_today_bal"]) / 1000} for d in data["data"][:30]] # $B 단위
+        
+        # 'Operating Cash Balance' 항목만 필터링
+        tga_rows = [d for d in data.get("data", []) if "Operating Cash Balance" in d.get("type", "")]
+        
+        if tga_rows:
+            latest = tga_rows[0]
+            history = [{"date": d["record_date"], "value": float(d["close_today_bal"]) / 1000} for d in tga_rows[:30]]
             history.reverse()
             return {
-                "latest_value": float(latest["close_today_bal"]) / 1000, # $B
+                "latest_value": float(latest["close_today_bal"]) / 1000,
                 "date": latest["record_date"],
                 "history": history
             }
@@ -221,13 +225,14 @@ def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
         )
         return response.text
     except Exception as e:
-        error_msg = str(e)
-        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+        error_msg = str(e).upper()
+        # gRPC 또는 JSON 에러 메시지에서 429 관련 키워드 확인
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg or "QUOTA" in error_msg:
             return """⚠️ **AI Advisor 할당량 초과 (Rate Limit)**
             
-현재 Gemini API의 무료 티켓 사용량이 한도에 도달했습니다. 잠시 후(약 1분 뒤) 다시 '새로고침'을 시도해 주세요. 
+현재 Gemini API의 무료 티어 사용량이 한도에 도달했습니다. 잠시 후(약 1~5분 뒤) 다시 시도해 주세요. 
 (무료 티어 모델은 분당/일일 호출 횟수가 제한되어 있습니다.)"""
-        return f"AI Advisor 호출 중 오류 발생: {error_msg}"
+        return f"AI Advisor 호출 중 오류 발생: {str(e)}"
 
 
 def get_ticker_history(ticker_symbol: str, period: str = "1y") -> pd.DataFrame:
