@@ -193,9 +193,9 @@ def load_ticker_history_data(ticker, period="1y"):
     return get_ticker_history(ticker, period)
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=43200, show_spinner=True)
 def load_liquidity_data():
-    """TGA 및 연준 자산 데이터 캐싱 (1시간 갱신)"""
+    """TGA 및 연준 자산 데이터 캐싱 (12시간 갱신)"""
     from data_fetcher import get_tga_data, get_fred_liquidity_data
     return {
         "tga": get_tga_data(),
@@ -281,12 +281,14 @@ st.markdown("---")
 
 
 # ===========================================================================
-# 실제 데이터 로드
+# 실제 데이터 로드 (모든 탭에서 공통 사용)
 # ===========================================================================
 from data_fetcher import get_us_market_status
 macro_data = load_macro_data(av_api_key)
 market_status = get_us_market_status()
 liquidity_data = load_liquidity_data()
+# 인텔리전스 피드도 미리 로드하여 핀 탭 이동 시 딜레이 제거
+intelligence_data = load_intelligence_feed(gemini_api_key)
 
 
 # ===========================================================================
@@ -357,10 +359,7 @@ if menu == "Overview":
     # -------------------------------------------------------------------
     st.markdown("### 🤖 AI Market Advisor (종합 투자 전략)")
     
-    # 지능형 피드 데이터 가져오기 (Gemini 조언용 컨텍스트)
-    intelligence_data = load_intelligence_feed(gemini_api_key)
-    
-    with st.spinner("Gemini 2.5가 시장 데이터를 분석 중입니다..."):
+    with st.spinner("AI가 최신 전략을 준비 중..."):
         ai_advice = load_gemini_25_market_report(macro_data, intelligence_data, liquidity_data, gemini_api_key)
     
     # AI 어드바이스 박스 (스타일 적용)
@@ -623,10 +622,8 @@ elif menu == "Intelligence Feed":
             if st.button("🔄 Refresh Feed"):
                 load_intelligence_feed.clear()
         
-        with st.spinner("Analyzing global intelligence (superforecasting in progress)..."):
-            # Time-based bypass to force cloud to drop old empty cache right now
-            force_refresh = datetime.now().strftime("%H")
-            feed_data = load_intelligence_feed(gemini_api_key, bypass_cache=force_refresh)
+        # 이미 위에서 로드된 intelligence_data 사용
+        feed_data = intelligence_data
             
         if isinstance(feed_data, str):
             st.error(f"🚨 인텔리전스 피드 로딩 오류: {feed_data}")
