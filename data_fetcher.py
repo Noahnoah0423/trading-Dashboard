@@ -329,7 +329,16 @@ def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=
             
         return results
 
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 429:
+            fallback = fetch_yahoo_rss_fallback()
+            if fallback:
+                return fallback
+        return f"GDELT API HTTP Error: {response.status_code}"
     except requests.exceptions.Timeout:
+        fallback = fetch_yahoo_rss_fallback()
+        if fallback:
+            return fallback
         return "GDELT API Timeout Error: 서버 응답 지연"
     except Exception as e:
         error_msg = str(e)
