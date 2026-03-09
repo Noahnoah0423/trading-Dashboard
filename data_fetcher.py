@@ -375,12 +375,15 @@ def analyze_news_with_gemini(news_list, api_key):
     
     Filter out any news that scores below 70. 
     
+    IMPORTANT: For any headline that scores 90 or above (CRITICAL), you MUST also provide a Korean translation of the headline in the "title_kr" field. For items below 90, set "title_kr" to null.
+    
     Output strictly valid JSON with no markdown formatting or extra text. The JSON format must be a list of objects like this:
     [
       {{
         "index": <integer corresponding to the news item index>,
         "score": <integer 70-100>,
-        "investment_angle": "<one sentence concise investment angle/insight>"
+        "investment_angle": "<one sentence concise investment angle/insight>",
+        "title_kr": "<Korean translation of headline if score >= 90, else null>"
       }}
     ]
     
@@ -412,7 +415,8 @@ def analyze_news_with_gemini(news_list, api_key):
                     "domain": original["domain"],
                     "date": original.get("date", original.get("seendate", "Unknown")),
                     "score": res.get("score", 0),
-                    "investment_angle": res.get("investment_angle", "No insight provided.")
+                    "investment_angle": res.get("investment_angle", "No insight provided."),
+                    "title_kr": res.get("title_kr", None)
                 })
         
         # Score 기준 내림차순 정렬

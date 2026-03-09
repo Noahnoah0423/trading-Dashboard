@@ -457,7 +457,7 @@ elif menu == "Intelligence Feed":
     # -------------------------------------------------------------------
     # Intelligence Feed 탭 (GDELT + Gemini 요약)
     # -------------------------------------------------------------------
-    st.markdown("### 🧠 Intelligence Feed (GDELT + Gemini 1.5 Flash)")
+    st.markdown("### 🧠 Intelligence Feed (GDELT + Gemini 2.5 Flash)")
     st.markdown(
         "<p style='color: #6b7688;'>GDELT 실시간 뉴스에 «슈퍼포어캐스팅» 원칙을 적용하여 "
         "단기 시장 변동성을 촉발할 가능성이 높은 뉴스를 선별합니다.</p>",
@@ -493,6 +493,15 @@ elif menu == "Intelligence Feed":
                 border_color = "#ff4444" if is_critical else "#2d3548"
                 bg_color = "#3d0a0a" if is_critical else "#1a1f2e"
                 
+                title_kr = item.get("title_kr")
+                kr_line = f"<p style='margin-top: 6px; margin-bottom: 0; color: #ffcc00; font-size: 1.0rem; font-weight: 600;'>🇰🇷 {title_kr}</p>" if is_critical and title_kr else ""
+                
+                article_date = item.get("date", "")
+                if not article_date or article_date == "Unknown":
+                    date_display = "N/A"
+                else:
+                    date_display = article_date[:16] if len(article_date) > 16 else article_date
+                
                 st.markdown(
                     f"""
                     <div style='background-color: {bg_color}; padding: 15px; border-radius: 8px; border: 1px solid {border_color}; margin-bottom: 20px;'>
@@ -507,8 +516,9 @@ elif menu == "Intelligence Feed":
                                 Score: {score}
                             </span>
                         </div>
+                        {kr_line}
                         <p style='margin-top: 5px; color: #8892a4; font-size: 0.85rem;'>
-                            Source: {item.get("domain", "Unknown")} | Date: {item.get("seendate", "")[:8]}
+                            Source: {item.get("domain", "Unknown")} | Date: {date_display}
                         </p>
                         <p style='margin-top: 10px; margin-bottom: 0px; font-size: 1.05rem;'>
                             <strong style='color: #00d4aa;'>💡 Investment Angle:</strong> {item.get("investment_angle", "N/A")}
