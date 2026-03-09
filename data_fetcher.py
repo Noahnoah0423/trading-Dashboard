@@ -291,9 +291,12 @@ def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=
             
         return results
 
+    except requests.exceptions.Timeout:
+        return "GDELT API Timeout Error: 서버 응답 지연"
     except Exception as e:
-        print(f"Error fetching GDELT data: {e}")
-        return []
+        error_msg = str(e)
+        print(f"Error fetching GDELT data: {error_msg}")
+        return f"GDELT Fetch Error: {error_msg}"
 
 def analyze_news_with_gemini(news_list, api_key):
     """
