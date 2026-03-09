@@ -196,10 +196,14 @@ def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
         # 컨텍스트 요약
         macro_summary = "\n".join([f"- {v['name']}: ${v['price']} ({v['change_pct']}%)" for k, v in macro_data.items()])
         
+        # 뉴스 데이터 요약 (리스트인 경우만 처리, 에러 문자열인 경우 빈 요약)
         news_summary = ""
-        critical_news = [n for n in news_data if n.get('score', 0) >= 90]
-        if critical_news:
-            news_summary = "CRITICAL NEWS:\n" + "\n".join([f"- {n['title']} (Score: {n['score']})" for n in critical_news[:3]])
+        if isinstance(news_data, list):
+            critical_news = [n for n in news_data if isinstance(n, dict) and n.get('score', 0) >= 90]
+            if critical_news:
+                news_summary = "CRITICAL NEWS:\n" + "\n".join([f"- {n['title']} (Score: {n['score']})" for n in critical_news[:3]])
+        elif isinstance(news_data, str) and news_data.startswith("GDELT"):
+             news_summary = f"Note: News data fetch issue ({news_data[:50]}...)"
         
         liq_summary = f"TGA: ${liquidity_data['tga']['latest_value']}B, Fed Assets: ${liquidity_data['fed']['latest_value']}T"
         
@@ -526,7 +530,7 @@ def analyze_news_with_gemini(news_list, api_key):
     if not api_key:
         return "Error: API Key is missing."
         
-    if not news_list:
+    if not news_list or not isinstance(news_list, list):
         return []
 
     from google import genai
@@ -535,7 +539,8 @@ def analyze_news_with_gemini(news_list, api_key):
     # Batch Prompt 구성
     news_text = ""
     for idx, news in enumerate(news_list):
-        news_text += f"[{idx}] Title: {news['title']}\n"
+        if isinstance(news, dict):
+            news_text += f"[{idx}] Title: {news.get('title', 'No Title')}\n"
         
     prompt = f"""
     You are a hedge fund lead analyst and superforecasting expert. 
