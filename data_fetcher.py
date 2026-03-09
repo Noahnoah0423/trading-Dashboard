@@ -298,9 +298,10 @@ def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=
 def analyze_news_with_gemini(news_list, api_key):
     """
     Gemini 1.5 Flash를 사용하여 뉴스의 투자 중요도를 필터링 (Superforecasting 원칙).
+    실패 시 (오류 메시지 문자열)을 반환할 수 있도록 변경.
     """
     if not api_key:
-        return []
+        return "Error: API Key is missing."
         
     if not news_list:
         return []
@@ -364,8 +365,9 @@ def analyze_news_with_gemini(news_list, api_key):
         return sorted(analyzed_news, key=lambda x: x["score"], reverse=True)
         
     except Exception as e:
-        print(f"Gemini Analysis Error: {e}")
-        return []
+        error_msg = str(e)
+        print(f"Gemini Analysis Error: {error_msg}")
+        return f"Gemini API Error: {error_msg}"
 
 
 # ---------------------------------------------------------------------------

@@ -470,7 +470,10 @@ elif menu == "Intelligence Feed":
         with st.spinner("Analyzing global intelligence (superforecasting in progress)..."):
             feed_data = load_intelligence_feed(gemini_api_key)
             
-        if not feed_data:
+        if isinstance(feed_data, str):
+            st.error(f"🚨 인텔리전스 피드 로딩 오류: {feed_data}")
+            st.info("API Key가 정확한지 확인하시거나 잠시 후 다시 시도해 주세요.")
+        elif not feed_data:
             st.info("최근 24시간 내 유의미한 거시/지정학 이벤트가 감지되지 않았거나 데이터 수집 중 오류가 발생했습니다.")
         else:
             for item in feed_data:
