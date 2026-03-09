@@ -190,6 +190,23 @@ def load_ticker_history_data(ticker, period="1y"):
 
 
 @st.cache_data(ttl=3600, show_spinner=True)
+def load_liquidity_data():
+    """TGA 및 연준 자산 데이터 캐싱 (1시간 갱신)"""
+    from data_fetcher import get_tga_data, get_fred_liquidity_data
+    return {
+        "tga": get_tga_data(),
+        "fed": get_fred_liquidity_data()
+    }
+
+
+@st.cache_data(ttl=3600, show_spinner=True)
+def load_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
+    """Gemini AI 투자 조언 캐싱 (1시간 갱신)"""
+    from data_fetcher import get_ai_market_advice
+    return get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key)
+
+
+@st.cache_data(ttl=3600, show_spinner=True)
 def load_intelligence_feed(api_key, bypass_cache=False):
     """GDELT 뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (1시간 갱신)"""
     raw_news = get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis", "War"], max_results=30)
@@ -255,13 +272,16 @@ st.markdown("---")
 # ===========================================================================
 # 실제 데이터 로드
 # ===========================================================================
+from data_fetcher import get_us_market_status
 macro_data = load_macro_data(av_api_key)
+market_status = get_us_market_status()
+liquidity_data = load_liquidity_data()
 
 
 # ===========================================================================
 # 커스텀 메트릭 위젯 렌더링 함수 (HTML 기반 - 0.84 호환)
 # ===========================================================================
-def render_metric_card(label, value, change_pct, timestamp=""):
+def render_metric_card(label, value, change_pct, timestamp="", market_status=None):
     """HTML 기반 메트릭 카드 렌더링"""
     if isinstance(change_pct, (int, float)):
         delta_class = "delta-up" if change_pct >= 0 else "delta-down"
@@ -276,9 +296,14 @@ def render_metric_card(label, value, change_pct, timestamp=""):
         value_str = "N/A"
 
     time_html = f"<div class='time'>{timestamp}</div>" if timestamp else ""
+    
+    status_html = ""
+    if market_status:
+        status_html = f"<div style='font-size: 0.75rem; font-weight: bold; color: {market_status['color']}; margin-bottom: 4px;'>● {market_status['status']}</div>"
 
     html = f"""
     <div class="metric-card">
+        {status_html}
         <div class="label">{label}</div>
         <div class="value">{value_str}</div>
         <div class="{delta_class}">{delta_str}</div>
@@ -301,8 +326,11 @@ for col, key in zip(cols, metric_keys):
     change = data.get("change_pct", "N/A")
     time_val = data.get("time", "")
 
+    # US 지수(SPY, QQQ)와 VIX에만 장 상태 표시
+    status_to_show = market_status if key in ["SPY", "QQQ", "^VIX"] else None
+
     with col:
-        html = render_metric_card(f"📈 {name}", price, change, timestamp=time_val)
+        html = render_metric_card(f"📈 {name}", price, change, timestamp=time_val, market_status=status_to_show)
         st.markdown(html, unsafe_allow_html=True)
         # 차트 보기 버튼 추가 (상태 저장)
         if st.button(f"🔍 Chart: {name}", key=f"btn_{key}"):
@@ -316,32 +344,46 @@ for col, key in zip(cols, metric_keys):
 
 if menu == "Overview":
     # -------------------------------------------------------------------
-    # 1) 시장 위기 경보 (Market Alert) - VIX 기반 (Overview 전용)
+    # 1) AI Market Advisor (Gemini 기반 종합 판단)
     # -------------------------------------------------------------------
-    vix_data = macro_data.get("^VIX", {})
-    vix_price = vix_data.get("price", None)
-
-    if isinstance(vix_price, (int, float)):
-        risk = calculate_market_risk(vix_price)
-    else:
-        risk = calculate_market_risk(None)
-
-    alert_class_map = {
-        "safe": "alert-safe",
-        "warning": "alert-warning",
-        "danger": "alert-danger",
-    }
-    alert_class = alert_class_map.get(risk["level"], "alert-unknown")
-    import re
-    alert_message_html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', risk["message"]).replace("\n", "<br>")
-
-    st.markdown(f"### {risk['icon']} 시장 위기 경보 (Market Alert)")
-    st.markdown(
-        f'<div class="alert-box {alert_class}">{alert_message_html}</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown("### 🤖 AI Market Advisor (종합 투자 전략)")
     
+    # 지능형 피드 데이터 가져오기 (Gemini 조언용 컨텍스트)
+    intelligence_data = load_intelligence_feed(gemini_api_key)
+    
+    with st.spinner("Gemini AI가 시장 데이터를 분석 중입니다..."):
+        ai_advice = load_ai_market_advice(macro_data, intelligence_data, liquidity_data, gemini_api_key)
+    
+    # AI 어드바이스 박스 (스타일 적용)
+    st.markdown(
+        f"""
+        <div style="background-color: #1e2538; padding: 20px; border-radius: 10px; border-left: 5px solid #00d4aa; margin-bottom: 25px;">
+            {ai_advice}
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
     st.markdown("---")
+    
+    # -------------------------------------------------------------------
+    # 2-1) 유동성 지표 (Liquidity Metrics)
+    # -------------------------------------------------------------------
+    st.markdown("### 💧 US Liquidity & Macro Summary")
+    l_col1, l_col2, l_col3 = st.columns(3)
+    
+    with l_col1:
+        tga = liquidity_data.get("tga", {})
+        st.metric("Treasury General Account (TGA)", f"${tga.get('latest_value', 'N/A')}B", help="미 재무부 현금 잔고 (유동성 흡수/방출 지표)")
+        
+    with l_col2:
+        fed = liquidity_data.get("fed", {})
+        st.metric("Fed Total Assets (WALCL)", f"${fed.get('latest_value', 'N/A')}T", help="연준 대차대조표 총 자산 (양적완화/긴축 지표)")
+        
+    with l_col3:
+        vix_data = macro_data.get("^VIX", {})
+        vix_price = vix_data.get("price", "N/A")
+        st.metric("VIX Index (Fear Gauge)", f"{vix_price}", delta=f"{vix_data.get('change_pct', 0):+.2f}%")
 
     # -------------------------------------------------------------------
     # 2) 선택된 자산 차트 (인터랙션)
@@ -393,6 +435,34 @@ if menu == "Overview":
         st.plotly_chart(fig_hist, use_container_width=True)
     else:
         st.error("차트 데이터를 불러올 수 없습니다.")
+
+    # -------------------------------------------------------------------
+    # 3) 유동성 트렌드 차트 (TGA & Fed Assets)
+    # -------------------------------------------------------------------
+    st.markdown("#### 🌊 Liquidity Trends (TGA & Fed Balance Sheet)")
+    
+    tga_hist = liquidity_data.get("tga", {}).get("history", [])
+    fed_hist = liquidity_data.get("fed", {}).get("history", [])
+    
+    if tga_hist and fed_hist:
+        tga_df = pd.DataFrame(tga_hist)
+        fed_df = pd.DataFrame(fed_hist)
+        
+        c1, c2 = st.columns(2)
+        
+        with c1:
+            fig_tga = px.area(tga_df, x="date", y="value", title="TGA Balance ($B)",
+                             template="plotly_dark", color_discrete_sequence=["#ffaa00"])
+            fig_tga.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=300)
+            st.plotly_chart(fig_tga, use_container_width=True)
+            
+        with c2:
+            fig_fed = px.line(fed_df, x="date", y="value", title="Fed Total Assets ($T)",
+                             template="plotly_dark", color_discrete_sequence=["#00d4aa"])
+            fig_fed.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=300)
+            st.plotly_chart(fig_fed, use_container_width=True)
+    
+    st.markdown("---")
 
     st.markdown("---")
     # -------------------------------------------------------------------
@@ -844,8 +914,8 @@ elif menu == "Insider Trading":
     with st.expander("Raw Macro Data"):
         st.json(macro_data)
 
-    with st.expander("Risk Assessment"):
-        st.json(risk)
+    with st.expander("AI Advisor Content"):
+        st.write(ai_advice)
 
     with st.expander("System Info"):
         st.code(f"""

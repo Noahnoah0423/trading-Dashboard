@@ -12,6 +12,8 @@ from typing import Dict, List, Any
 import requests
 import json
 import urllib.parse
+from datetime import datetime, timedelta
+import re
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +91,136 @@ def get_macro_data(av_api_key: str = "") -> Dict[str, Dict[str, Any]]:
             }
 
     return result
+
+
+def get_us_market_status() -> Dict[str, str]:
+    """
+    현재 뉴욕(ET) 시간 기준 시장 상태를 반환합니다.
+    - Market Open: 09:30 ~ 16:00
+    - Before Market: 04:00 ~ 09:30
+    - After Market: 16:00 ~ 20:00
+    - Market Closed: 그 외 및 주말
+    """
+    # KST to ET (KST는 UTC+9, ET는 UTC-5/UTC-4)
+    # 3월 9일은 서머타임 기간(3월 둘째 일요일~11월 첫째 일요일) -> UTC-4
+    # 단순화를 위해 현재 UTC 기준으로 계산
+    now_utc = datetime.utcnow()
+    # 서머타임 적용 여부 (대략적)
+    # 서머타임(EDT) = UTC - 4, 표준시(EST) = UTC - 5
+    # 2026년 서머타임: 3월 8일 ~ 11월 1일
+    et_offset = -4 if (datetime(2026, 3, 8) <= now_utc <= datetime(2026, 11, 1)) else -5
+    now_et = now_utc + timedelta(hours=et_offset)
+    
+    current_time = now_et.time()
+    is_weekend = now_et.weekday() >= 5
+    
+    if is_weekend:
+        return {"status": "Market Closed", "color": "#8892a4"}
+        
+    if datetime.strptime("09:30", "%H:%M").time() <= current_time <= datetime.strptime("16:00", "%H:%M").time():
+        return {"status": "Market Open", "color": "#00d4aa"}
+    elif datetime.strptime("04:00", "%H:%M").time() <= current_time < datetime.strptime("09:30", "%H:%M").time():
+        return {"status": "Before Market", "color": "#ffaa00"}
+    elif datetime.strptime("16:00", "%H:%M").time() < current_time <= datetime.strptime("20:00", "%H:%M").time():
+        return {"status": "After Market", "color": "#ffaa00"}
+    else:
+        return {"status": "Market Closed", "color": "#8892a4"}
+
+
+def get_tga_data() -> Dict[str, Any]:
+    """미 재무부 일반 계정(TGA) 잔고 데이터를 가져옵니다."""
+    try:
+        url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/dts_table_1?filter=record_date:gte:2024-01-01&sort=-record_date&fields=record_date,close_today_bal&page[size]=100"
+        resp = requests.get(url, timeout=10)
+        data = resp.json()
+        if "data" in data and len(data["data"]) > 0:
+            latest = data["data"][0]
+            # 최근 20개 데이터로 리스트 생성 (차트용)
+            history = [{"date": d["record_date"], "value": float(d["close_today_bal"]) / 1000} for d in data["data"][:30]] # $B 단위
+            history.reverse()
+            return {
+                "latest_value": float(latest["close_today_bal"]) / 1000, # $B
+                "date": latest["record_date"],
+                "history": history
+            }
+    except Exception as e:
+        print(f"Error fetching TGA data: {e}")
+    return {"latest_value": "N/A", "date": "N/A", "history": []}
+
+
+def get_fred_liquidity_data() -> Dict[str, Any]:
+    """연준 총 자산(WALCL) 데이터를 가져옵니다 (FRED CSV 활용)."""
+    try:
+        # WALCL: Assets: Total Assets: Less Eliminations from Consolidation: Wednesday Level
+        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL"
+        df = pd.read_csv(url)
+        if not df.empty:
+            df['DATE'] = pd.to_datetime(df['DATE'])
+            latest_val = float(df['WALCL'].iloc[-1]) / 1000000 # $T 단위 시각화
+            latest_date = df['DATE'].iloc[-1].strftime('%Y-%m-%d')
+            
+            # 최근 30개 데이터 (주간 데이터)
+            recent = df.tail(30)
+            history = [{"date": row['DATE'].strftime('%Y-%m-%d'), "value": float(row['WALCL']) / 1000000} for _, row in recent.iterrows()]
+            
+            return {
+                "latest_value": round(latest_val, 2),
+                "date": latest_date,
+                "history": history
+            }
+    except Exception as e:
+        print(f"Error fetching Fed Assets: {e}")
+    return {"latest_value": "N/A", "date": "N/A", "history": []}
+
+
+def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
+    """모든 시장 데이터를 종합하여 Gemini로부터 투자 전략 리포트를 생성합니다."""
+    if not gemini_api_key:
+        return "Gemini API Key가 설정되지 않았습니다."
+        
+    try:
+        from google import genai
+        from google.genai import types
+        
+        client = genai.Client(api_key=gemini_api_key)
+        
+        # 컨텍스트 요약
+        macro_summary = "\n".join([f"- {v['name']}: ${v['price']} ({v['change_pct']}%)" for k, v in macro_data.items()])
+        
+        news_summary = ""
+        critical_news = [n for n in news_data if n.get('score', 0) >= 90]
+        if critical_news:
+            news_summary = "CRITICAL NEWS:\n" + "\n".join([f"- {n['title']} (Score: {n['score']})" for n in critical_news[:3]])
+        
+        liq_summary = f"TGA: ${liquidity_data['tga']['latest_value']}B, Fed Assets: ${liquidity_data['fed']['latest_value']}T"
+        
+        prompt = f"""
+        당신은 헤지펀드 수석 전략가입니다. 다음 실시간 시장 데이터를 바탕으로 투자 포트폴리오 전략을 제시하세요.
+        
+        [시장 지표]
+        {macro_summary}
+        
+        [유동성 지표]
+        {liq_summary}
+        
+        [주요 뉴스 개요]
+        {news_summary}
+        
+        지침:
+        1. 현재 시장의 위험 수준을 평가하세요.
+        2. 포트폴리오 비중 확대(Overweight) 또는 축소(Underweight) 의견을 명확히 하세요.
+        3. 추천 자산군(주식, 채권, 금, 원유 등)과 이유를 설명하세요.
+        4. 한국어로 친절하면서도 전문적인 톤으로 답변하세요.
+        5. 답변은 마크다운 형식을 사용하고, 짧고 강렬하게 핵심만 짚어주세요.
+        """
+        
+        response = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
+        return response.text
+    except Exception as e:
+        return f"AI Advisor 호출 중 오류 발생: {str(e)}"
 
 
 def get_ticker_history(ticker_symbol: str, period: str = "1y") -> pd.DataFrame:
