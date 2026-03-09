@@ -306,6 +306,10 @@ def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=
         try:
             data = response.json()
         except json.JSONDecodeError:
+            print("[WARNING] GDELT returned 200 but failed to parse JSON (likely a block/captcha page). Falling back...")
+            fallback = fetch_yahoo_rss_fallback()
+            if fallback:
+                return fallback
             return f"GDELT API Format Error: 서버가 JSON 형식이 아닌 데이터를 반환했습니다. (응답 코드: {response.status_code})"
             
         articles = data.get("articles", [])
