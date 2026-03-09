@@ -131,7 +131,8 @@ def get_tga_data() -> Dict[str, Any]:
     """미 재무부 일반 계정(TGA) 잔고 데이터를 가져옵니다."""
     try:
         url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/dts_table_1?filter=record_date:gte:2024-01-01&sort=-record_date&fields=record_date,close_today_bal&page[size]=100"
-        resp = requests.get(url, timeout=10)
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, headers=headers, timeout=10)
         data = resp.json()
         if "data" in data and len(data["data"]) > 0:
             latest = data["data"][0]
@@ -145,7 +146,7 @@ def get_tga_data() -> Dict[str, Any]:
             }
     except Exception as e:
         print(f"Error fetching TGA data: {e}")
-    return {"latest_value": "N/A", "date": "N/A", "history": []}
+    return {"latest_value": 0, "date": "N/A", "history": []}
 
 
 def get_fred_liquidity_data() -> Dict[str, Any]:
@@ -170,7 +171,7 @@ def get_fred_liquidity_data() -> Dict[str, Any]:
             }
     except Exception as e:
         print(f"Error fetching Fed Assets: {e}")
-    return {"latest_value": "N/A", "date": "N/A", "history": []}
+    return {"latest_value": 0, "date": "N/A", "history": []}
 
 
 def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
@@ -220,7 +221,13 @@ def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
         )
         return response.text
     except Exception as e:
-        return f"AI Advisor 호출 중 오류 발생: {str(e)}"
+        error_msg = str(e)
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+            return """⚠️ **AI Advisor 할당량 초과 (Rate Limit)**
+            
+현재 Gemini API의 무료 티켓 사용량이 한도에 도달했습니다. 잠시 후(약 1분 뒤) 다시 '새로고침'을 시도해 주세요. 
+(무료 티어 모델은 분당/일일 호출 횟수가 제한되어 있습니다.)"""
+        return f"AI Advisor 호출 중 오류 발생: {error_msg}"
 
 
 def get_ticker_history(ticker_symbol: str, period: str = "1y") -> pd.DataFrame:

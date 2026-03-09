@@ -301,15 +301,13 @@ def render_metric_card(label, value, change_pct, timestamp="", market_status=Non
     if market_status:
         status_html = f"<div style='font-size: 0.75rem; font-weight: bold; color: {market_status['color']}; margin-bottom: 4px;'>● {market_status['status']}</div>"
 
-    html = f"""
-    <div class="metric-card">
-        {status_html}
-        <div class="label">{label}</div>
-        <div class="value">{value_str}</div>
-        <div class="{delta_class}">{delta_str}</div>
-        {time_html}
-    </div>
-    """
+    html = f"""<div class="metric-card">
+{status_html}
+<div class="label">{label}</div>
+<div class="value">{value_str}</div>
+<div class="{delta_class}">{delta_str}</div>
+{time_html}
+</div>"""
     return html
 
 
@@ -357,8 +355,8 @@ if menu == "Overview":
     # AI 어드바이스 박스 (스타일 적용)
     st.markdown(
         f"""
-        <div style="background-color: #1e2538; padding: 20px; border-radius: 10px; border-left: 5px solid #00d4aa; margin-bottom: 25px;">
-            {ai_advice}
+        <div style="background-color: #1e2538; padding: 20px; border-radius: 10px; border-left: 5px solid #00d4aa; margin-bottom: 25px; line-height: 1.6;">
+            {ai_advice.replace('\n', '<br>')}
         </div>
         """,
         unsafe_allow_html=True
@@ -374,11 +372,15 @@ if menu == "Overview":
     
     with l_col1:
         tga = liquidity_data.get("tga", {})
-        st.metric("Treasury General Account (TGA)", f"${tga.get('latest_value', 'N/A')}B", help="미 재무부 현금 잔고 (유동성 흡수/방출 지표)")
+        tga_val = tga.get('latest_value', 'N/A')
+        tga_disp = f"${tga_val:,.1f}B" if isinstance(tga_val, (int, float)) and tga_val > 0 else "N/A"
+        st.metric("Treasury General Account (TGA)", tga_disp, help="미 재무부 현금 잔고 (유동성 흡수/방출 지표)")
         
     with l_col2:
         fed = liquidity_data.get("fed", {})
-        st.metric("Fed Total Assets (WALCL)", f"${fed.get('latest_value', 'N/A')}T", help="연준 대차대조표 총 자산 (양적완화/긴축 지표)")
+        fed_val = fed.get('latest_value', 'N/A')
+        fed_disp = f"${fed_val:,.2f}T" if isinstance(fed_val, (int, float)) and fed_val > 0 else "N/A"
+        st.metric("Fed Total Assets (WALCL)", fed_disp, help="연준 대차대조표 총 자산 (양적완화/긴축 지표)")
         
     with l_col3:
         vix_data = macro_data.get("^VIX", {})
