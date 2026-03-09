@@ -204,8 +204,8 @@ def load_liquidity_data():
 
 
 @st.cache_data(ttl=3600, show_spinner=True)
-def load_market_intelligence_report(macro_data, news_data, liquidity_data, gemini_api_key):
-    """Gemini AI 투자 조언 캐싱 (1시간 갱신 - 버전 3)"""
+def load_gemini_25_market_report(macro_data, news_data, liquidity_data, gemini_api_key):
+    """Gemini 2.5 Flash 기반 투자 조언 캐싱 (1시간 갱신)"""
     from data_fetcher import get_ai_market_advice
     return get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key)
 
@@ -360,8 +360,8 @@ if menu == "Overview":
     # 지능형 피드 데이터 가져오기 (Gemini 조언용 컨텍스트)
     intelligence_data = load_intelligence_feed(gemini_api_key)
     
-    with st.spinner("Gemini AI가 시장 데이터를 분석 중입니다..."):
-        ai_advice = load_market_intelligence_report(macro_data, intelligence_data, liquidity_data, gemini_api_key)
+    with st.spinner("Gemini 2.5가 시장 데이터를 분석 중입니다..."):
+        ai_advice = load_gemini_25_market_report(macro_data, intelligence_data, liquidity_data, gemini_api_key)
     
     # AI 어드바이스 박스 (스타일 적용)
     st.markdown(
