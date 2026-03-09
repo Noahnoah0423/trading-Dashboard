@@ -204,8 +204,8 @@ def load_liquidity_data():
 
 
 @st.cache_data(ttl=3600, show_spinner=True)
-def load_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
-    """Gemini AI 투자 조언 캐싱 (1시간 갱신)"""
+def load_market_intelligence_report(macro_data, news_data, liquidity_data, gemini_api_key):
+    """Gemini AI 투자 조언 캐싱 (1시간 갱신 - 버전 3)"""
     from data_fetcher import get_ai_market_advice
     return get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key)
 
@@ -250,6 +250,9 @@ else:
     gemini_api_key = st.sidebar.text_input("Gemini API Key (Local Setup)", type="password", help="secrets.toml이 없을 때 표시됩니다.")
 
 auto_refresh = st.sidebar.checkbox("Auto Refresh (1hr)", value=True)
+if st.sidebar.button("🔄 Force Clear Cache"):
+    st.cache_data.clear()
+    st.experimental_rerun()
 show_debug = st.sidebar.checkbox("Debug Mode", value=False)
 st.sidebar.markdown("---")
 st.sidebar.text(f"🕐 Last Update: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
@@ -354,7 +357,7 @@ if menu == "Overview":
     intelligence_data = load_intelligence_feed(gemini_api_key)
     
     with st.spinner("Gemini AI가 시장 데이터를 분석 중입니다..."):
-        ai_advice = load_ai_market_advice(macro_data, intelligence_data, liquidity_data, gemini_api_key)
+        ai_advice = load_market_intelligence_report(macro_data, intelligence_data, liquidity_data, gemini_api_key)
     
     # AI 어드바이스 박스 (스타일 적용)
     st.markdown(

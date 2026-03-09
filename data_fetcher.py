@@ -131,20 +131,22 @@ def get_tga_data() -> Dict[str, Any]:
     """미 재무부 일반 계정(TGA) 잔고 데이터를 가져옵니다."""
     try:
         # TGA Balance: Operating Cash Balance (Treasury General Account)
-        url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/dts_table_1?sort=-record_date&page[size]=200"
+        # Endpoint: https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/operating_cash_balance
+        url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/operating_cash_balance?sort=-record_date&page[size]=100"
         headers = {"User-Agent": "Mozilla/5.0"}
         resp = requests.get(url, headers=headers, timeout=10)
         data = resp.json()
         
-        # 'Operating Cash Balance' 항목만 필터링
-        tga_rows = [d for d in data.get("data", []) if "Operating Cash Balance" in d.get("type", "")]
+        # 'Treasury General Account (TGA) Closing Balance' 항목만 필터링
+        tga_rows = [d for d in data.get("data", []) if "Treasury General Account (TGA) Closing Balance" in d.get("account_type", "")]
         
         if tga_rows:
             latest = tga_rows[0]
-            history = [{"date": d["record_date"], "value": float(d["close_today_bal"]) / 1000} for d in tga_rows[:30]]
+            # 최근 30개 데이터로 리스트 생성 (차트용)
+            history = [{"date": d["record_date"], "value": float(d["close_today_bal"]) / 1000} for d in tga_rows[:30]] # $B 단위
             history.reverse()
             return {
-                "latest_value": float(latest["close_today_bal"]) / 1000,
+                "latest_value": float(latest["close_today_bal"]) / 1000, # $B
                 "date": latest["record_date"],
                 "history": history
             }
@@ -160,13 +162,15 @@ def get_fred_liquidity_data() -> Dict[str, Any]:
         url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL"
         df = pd.read_csv(url)
         if not df.empty:
-            df['DATE'] = pd.to_datetime(df['DATE'])
+            # FRED CSV의 컬럼명은 'observation_date'와 'WALCL'입니다.
+            date_col = 'observation_date' if 'observation_date' in df.columns else 'DATE'
+            df[date_col] = pd.to_datetime(df[date_col])
             latest_val = float(df['WALCL'].iloc[-1]) / 1000000 # $T 단위 시각화
-            latest_date = df['DATE'].iloc[-1].strftime('%Y-%m-%d')
+            latest_date = df[date_col].iloc[-1].strftime('%Y-%m-%d')
             
             # 최근 30개 데이터 (주간 데이터)
             recent = df.tail(30)
-            history = [{"date": row['DATE'].strftime('%Y-%m-%d'), "value": float(row['WALCL']) / 1000000} for _, row in recent.iterrows()]
+            history = [{"date": row[date_col].strftime('%Y-%m-%d'), "value": float(row['WALCL']) / 1000000} for _, row in recent.iterrows()]
             
             return {
                 "latest_value": round(latest_val, 2),
