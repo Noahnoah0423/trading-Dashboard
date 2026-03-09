@@ -351,7 +351,7 @@ def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=
 
 def analyze_news_with_gemini(news_list, api_key):
     """
-    Gemini 1.5 Flash를 사용하여 뉴스의 투자 중요도를 필터링 (Superforecasting 원칙).
+    Gemini 2.5 Flash를 사용하여 뉴스의 투자 중요도를 필터링 (Superforecasting 원칙).
     실패 시 (오류 메시지 문자열)을 반환할 수 있도록 변경.
     """
     if not api_key:
@@ -360,9 +360,8 @@ def analyze_news_with_gemini(news_list, api_key):
     if not news_list:
         return []
 
-    import google.generativeai as genai
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
+    from google import genai
+    client = genai.Client(api_key=api_key)
     
     # Batch Prompt 구성
     news_text = ""
@@ -390,12 +389,12 @@ def analyze_news_with_gemini(news_list, api_key):
     """
     
     try:
-        # JSON 모드 명시적 설정 (버전 호환성 확인)
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                response_mime_type="application/json",
-            )
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config={
+                "response_mime_type": "application/json",
+            }
         )
         
         text_resp = response.text.strip()
