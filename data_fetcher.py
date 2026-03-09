@@ -53,6 +53,7 @@ def get_macro_data(av_api_key: str = "") -> Dict[str, Dict[str, Any]]:
                             "price": round(latest_close, 2),
                             "change_pct": round(change_pct, 2),
                             "name": display_name,
+                            "time": quote.get("07. latest trading day", "N/A")
                         }
                         continue
                 
@@ -60,17 +61,22 @@ def get_macro_data(av_api_key: str = "") -> Dict[str, Dict[str, Any]]:
                     "price": "N/A",
                     "change_pct": "N/A",
                     "name": display_name,
+                    "time": "N/A"
                 }
                 continue
 
             latest_close = hist["Close"].iloc[-1]
             prev_close = hist["Close"].iloc[-2]
             change_pct = ((latest_close - prev_close) / prev_close) * 100
+            
+            # 마지막 거래 시간 (날짜) 추출
+            last_date = hist.index[-1].strftime('%Y-%m-%d')
 
             result[ticker_symbol] = {
                 "price": round(float(latest_close), 2),
                 "change_pct": round(float(change_pct), 2),
                 "name": display_name,
+                "time": last_date
             }
 
         except Exception as e:
@@ -79,9 +85,24 @@ def get_macro_data(av_api_key: str = "") -> Dict[str, Dict[str, Any]]:
                 "price": "N/A",
                 "change_pct": "N/A",
                 "name": display_name,
+                "time": "N/A"
             }
 
     return result
+
+
+def get_ticker_history(ticker_symbol: str, period: str = "1y") -> pd.DataFrame:
+    """
+    주어진 티커의 시계열 역사 데이터를 가져옵니다.
+    차트 렌더링용으로 사용됩니다.
+    """
+    try:
+        ticker = yf.Ticker(ticker_symbol)
+        hist = ticker.history(period=period)
+        return hist
+    except Exception as e:
+        print(f"Error fetching history for {ticker_symbol}: {e}")
+        return pd.DataFrame()
 
 
 # ---------------------------------------------------------------------------

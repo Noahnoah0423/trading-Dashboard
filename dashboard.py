@@ -123,6 +123,13 @@ st.markdown("""
         color: #c0c8d8;
     }
 
+    .metric-card .time {
+        font-size: 0.7rem;
+        color: #6b7688;
+        text-align: right;
+        margin-top: 5px;
+    }
+
     /* 구분선 */
     hr {
         border-color: #2d3548 !important;
@@ -173,6 +180,13 @@ def load_money_flow_data(tickers):
 def load_insider_data(ticker):
     """내부자 거래 데이터 캐싱 (1시간 갱신)"""
     return get_insider_trading_data(ticker)
+
+
+@st.cache_data(ttl=3600, show_spinner=True)
+def load_ticker_history_data(ticker, period="1y"):
+    """티커 시계열 데이터 캐싱 (1시간 갱신)"""
+    from data_fetcher import get_ticker_history
+    return get_ticker_history(ticker, period)
 
 
 @st.cache_data(ttl=3600, show_spinner=True)
@@ -247,7 +261,7 @@ macro_data = load_macro_data(av_api_key)
 # ===========================================================================
 # 커스텀 메트릭 위젯 렌더링 함수 (HTML 기반 - 0.84 호환)
 # ===========================================================================
-def render_metric_card(label, value, change_pct):
+def render_metric_card(label, value, change_pct, timestamp=""):
     """HTML 기반 메트릭 카드 렌더링"""
     if isinstance(change_pct, (int, float)):
         delta_class = "delta-up" if change_pct >= 0 else "delta-down"
@@ -261,11 +275,14 @@ def render_metric_card(label, value, change_pct):
     else:
         value_str = "N/A"
 
+    time_html = f"<div class='time'>{timestamp}</div>" if timestamp else ""
+
     html = f"""
     <div class="metric-card">
         <div class="label">{label}</div>
         <div class="value">{value_str}</div>
         <div class="{delta_class}">{delta_str}</div>
+        {time_html}
     </div>
     """
     return html
@@ -282,45 +299,15 @@ for col, key in zip(cols, metric_keys):
     name = data.get("name", key)
     price = data.get("price", "N/A")
     change = data.get("change_pct", "N/A")
+    time_val = data.get("time", "")
 
     with col:
-        html = render_metric_card(f"📈 {name}", price, change)
+        html = render_metric_card(f"📈 {name}", price, change, timestamp=time_val)
         st.markdown(html, unsafe_allow_html=True)
+        # 차트 보기 버튼 추가 (상태 저장)
+        if st.button(f"🔍 Chart: {name}", key=f"btn_{key}"):
+            st.session_state['selected_ticker'] = key
 
-
-# ===========================================================================
-# 시장 위기 경보 (Market Alert) - VIX 기반
-# ===========================================================================
-st.markdown("")  # 간격
-
-vix_data = macro_data.get("^VIX", {})
-vix_price = vix_data.get("price", None)
-
-if isinstance(vix_price, (int, float)):
-    risk = calculate_market_risk(vix_price)
-else:
-    risk = calculate_market_risk(None)
-
-st.markdown("### 🛡️ 시장 위기 경보 (Market Alert)")
-
-# HTML 기반 알림 박스 (모든 Streamlit 버전 호환)
-alert_class_map = {
-    "safe": "alert-safe",
-    "warning": "alert-warning",
-    "danger": "alert-danger",
-}
-alert_class = alert_class_map.get(risk["level"], "alert-unknown")
-alert_message = risk["message"].replace("\n", "<br>").replace("**", "<strong>").replace("**", "</strong>")
-# 볼드 마크다운을 HTML로 변환
-import re
-alert_message_html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', risk["message"]).replace("\n", "<br>")
-
-st.markdown(
-    f'<div class="alert-box {alert_class}">{alert_message_html}</div>',
-    unsafe_allow_html=True,
-)
-
-st.markdown("---")
 
 
 # ===========================================================================
@@ -328,6 +315,63 @@ st.markdown("---")
 # ===========================================================================
 
 if menu == "Overview":
+    # -------------------------------------------------------------------
+    # 1) 시장 위기 경보 (Market Alert) - VIX 기반 (Overview 전용)
+    # -------------------------------------------------------------------
+    vix_data = macro_data.get("^VIX", {})
+    vix_price = vix_data.get("price", None)
+
+    if isinstance(vix_price, (int, float)):
+        risk = calculate_market_risk(vix_price)
+    else:
+        risk = calculate_market_risk(None)
+
+    alert_class_map = {
+        "safe": "alert-safe",
+        "warning": "alert-warning",
+        "danger": "alert-danger",
+    }
+    alert_class = alert_class_map.get(risk["level"], "alert-unknown")
+    import re
+    alert_message_html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', risk["message"]).replace("\n", "<br>")
+
+    st.markdown(f"### {risk['icon']} 시장 위기 경보 (Market Alert)")
+    st.markdown(
+        f'<div class="alert-box {alert_class}">{alert_message_html}</div>',
+        unsafe_allow_html=True,
+    )
+    
+    st.markdown("---")
+
+    # -------------------------------------------------------------------
+    # 2) 선택된 자산 차트 (인터랙션)
+    # -------------------------------------------------------------------
+    if 'selected_ticker' in st.session_state:
+        target_ticker = st.session_state['selected_ticker']
+        ticker_name = macro_data.get(target_ticker, {}).get("name", target_ticker)
+        
+        st.subheader(f"📊 {ticker_name} - Price History (1 Year)")
+        with st.spinner(f"Loading {ticker_name} chart..."):
+            hist_df = load_ticker_history_data(target_ticker)
+            
+        if not hist_df.empty:
+            fig_hist = px.line(hist_df, x=hist_df.index, y="Close", 
+                               template="plotly_dark",
+                               color_discrete_sequence=["#00d4aa"])
+            fig_hist.update_layout(
+                xaxis_title="Date",
+                yaxis_title="Price (USD)",
+                hovermode="x unified",
+                margin=dict(l=40, r=40, t=20, b=40),
+                height=400
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+        else:
+            st.error("차트 데이터를 불러올 수 없습니다.")
+    else:
+        st.info("💡 위 메트릭 카드의 **[🔍 Chart]** 버튼을 클릭하면 해당 자산의 시계열 차트가 여기에 표시됩니다.")
+
+    st.markdown("---")
     # -------------------------------------------------------------------
     # Overview 탭: 버블 차트 + 시장 요약
     # -------------------------------------------------------------------
