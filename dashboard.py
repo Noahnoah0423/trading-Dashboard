@@ -502,31 +502,16 @@ elif menu == "Intelligence Feed":
                 else:
                     date_display = article_date[:16] if len(article_date) > 16 else article_date
                 
-                st.markdown(
-                    f"""
-                    <div style='background-color: {bg_color}; padding: 15px; border-radius: 8px; border: 1px solid {border_color}; margin-bottom: 20px;'>
-                        <div style='display: flex; justify-content: space-between; align-items: center;'>
-                            <h4 style='margin: 0; color: #ffffff;'>
-                                {'🚨 <b>[CRITICAL]</b>' if is_critical else '📰'} 
-                                <a href='{item.get("url", "#")}' style='color: #ffffff; text-decoration: none;' target='_blank'>
-                                    {item.get("title", "No Title")}
-                                </a>
-                            </h4>
-                            <span style='background-color: {border_color}; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: bold;'>
-                                Score: {score}
-                            </span>
-                        </div>
-                        {kr_line}
-                        <p style='margin-top: 5px; color: #8892a4; font-size: 0.85rem;'>
-                            Source: {item.get("domain", "Unknown")} | Date: {date_display}
-                        </p>
-                        <p style='margin-top: 10px; margin-bottom: 0px; font-size: 1.05rem;'>
-                            <strong style='color: #00d4aa;'>💡 Investment Angle:</strong> {item.get("investment_angle", "N/A")}
-                        </p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                html_card = f"""<div style='background-color: {bg_color}; padding: 15px; border-radius: 8px; border: 1px solid {border_color}; margin-bottom: 20px;'>
+<div style='display: flex; justify-content: space-between; align-items: center;'>
+<h4 style='margin: 0; color: #ffffff;'>{'🚨 <b>[CRITICAL]</b>' if is_critical else '📰'} <a href='{item.get("url", "#")}' style='color: #ffffff; text-decoration: none;' target='_blank'>{item.get("title", "No Title")}</a></h4>
+<span style='background-color: {border_color}; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: bold;'>Score: {score}</span>
+</div>
+{kr_line}
+<p style='margin-top: 5px; color: #8892a4; font-size: 0.85rem;'>Source: {item.get("domain", "Unknown")} | Date: {date_display}</p>
+<p style='margin-top: 10px; margin-bottom: 0px; font-size: 1.05rem;'><strong style='color: #00d4aa;'>💡 Investment Angle:</strong> {item.get("investment_angle", "N/A")}</p>
+</div>"""
+                st.markdown(html_card, unsafe_allow_html=True)
 
 
 elif menu == "M3 Short Squeeze":
