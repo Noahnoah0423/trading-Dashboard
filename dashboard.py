@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from data_fetcher import (
     get_macro_data, 
@@ -524,7 +524,7 @@ if menu == "Overview":
         max_date = min(tga_df["date"].max(), fed_df["date"].max()).date()
         
         # 디폴트는 최근 6개월
-        default_start = max_date - datetime.timedelta(days=180)
+        default_start = max_date - timedelta(days=180)
         
         # 컬럼을 나누어 날짜 선택창을 작게 표시
         dcol1, dcol2 = st.columns([1, 2])
@@ -670,7 +670,7 @@ if menu == "Overview":
     if not bubble_df.empty:
         summary_rows = []
         for _, row in bubble_df.iterrows():
-            change = row['Return (%)']
+            change = float(row['Return (%)'])
             status = "🟢 Up" if change > 0 else ("🔴 Down" if change < 0 else "⚪ Flat")
             
             summary_rows.append({
@@ -679,12 +679,13 @@ if menu == "Overview":
                 "Price": f"${row['Price']:,.2f}",
                 "5D Change (%)": f"{change:+.2f}%",
                 "Status": status,
-                "Volatility (%)": f"{row['Volatility (%)']}%"
+                "Volatility (%)": f"{row['Volatility (%)']}%",
+                "_Raw Change": change  # 정렬을 위한 숨겨진/임시 컬럼
             })
 
         summary_df = pd.DataFrame(summary_rows)
-        # 5일 수익률 높은 순으로 정렬
-        summary_df = summary_df.sort_values(by="5D Change (%)", ascending=False).reset_index(drop=True)
+        # 5일 수익률(숫자) 높은 순으로 정렬 후 임시 컬럼 삭제
+        summary_df = summary_df.sort_values(by="_Raw Change", ascending=False).drop(columns=["_Raw Change"]).reset_index(drop=True)
         st.dataframe(summary_df, use_container_width=True)
     else:
         st.info("섹터 데이터를 불러오는 중 오류가 발생하여 테이블을 표출할 수 없습니다.")
@@ -1075,7 +1076,7 @@ elif menu == "Insider Trading":
                 max_date = insider_df["Start Date"].max().date()
                 
                 # 기본적으로 최근 1년 조회
-                default_start = max(min_date, max_date - datetime.timedelta(days=365))
+                default_start = max(min_date, max_date - timedelta(days=365))
                 
                 date_filter = st.date_input("조회 기간 선택:", value=(default_start, max_date), min_value=min_date, max_value=max_date, key="insider_date")
                 
