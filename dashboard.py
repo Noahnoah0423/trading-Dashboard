@@ -158,45 +158,45 @@ st.markdown("""
 # ===========================================================================
 # 데이터 캐싱 (st.cache_data - 최신 호환)
 # ===========================================================================
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_macro_data(av_api_key=""):
     """매크로 시장 데이터 캐싱 로드 (1시간 갱신)"""
     return get_macro_data(av_api_key)
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_short_squeeze_data(tickers_str):
     """공매도 데이터 캐싱 로드 (1시간 갱신)"""
     ticker_list = [t.strip() for t in tickers_str.split(",") if t.strip()]
     return get_short_squeeze_data(ticker_list)
 
 
-@st.cache_data(ttl=86400, show_spinner=True)
+@st.cache_data(ttl=86400, show_spinner=False)
 def load_correlation_data(tickers):
     """상관관계 데이터 캐싱 (1일 갱신)"""
     return get_correlation_data(tickers)
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_money_flow_data(tickers):
     """자금 흐름 데이터 캐싱 (1시간 갱신)"""
     return get_money_flow_data(tickers)
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_insider_data(ticker):
     """내부자 거래 데이터 캐싱 (1시간 갱신)"""
     return get_insider_trading_data(ticker)
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_ticker_history_data(ticker, period="1y"):
     """티커 시계열 데이터 캐싱 (1시간 갱신)"""
     from data_fetcher import get_ticker_history
     return get_ticker_history(ticker, period)
 
 
-@st.cache_data(ttl=3600, show_spinner=True)
+@st.cache_data(ttl=3600, show_spinner=False)
 def load_liquidity_data():
     """TGA 및 연준 자산 데이터 캐싱 (1시간 갱신)"""
     from data_fetcher import get_tga_data, get_fred_liquidity_data
@@ -206,14 +206,14 @@ def load_liquidity_data():
     }
 
 
-@st.cache_data(ttl=43200, show_spinner=True)
+@st.cache_data(ttl=43200, show_spinner=False)
 def load_gemini_25_market_report(macro_data, news_data, liquidity_data, gemini_api_key):
     """Gemini 2.5 Flash 기반 투자 조언 캐싱 (12시간 갱신)"""
     from data_fetcher import get_ai_market_advice
     return get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key)
 
 
-@st.cache_data(ttl=43200, show_spinner=True)
+@st.cache_data(ttl=43200, show_spinner=False)
 def load_intelligence_feed(api_key, bypass_cache=False):
     """뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (12시간 갱신)"""
     raw_news = get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis", "War"], max_results=30)
@@ -378,9 +378,9 @@ def render_metric_card(label, value, change_pct, timestamp="", market_status=Non
 
 
 # ===========================================================================
-# 상단 메트릭 위젯 (5열 배치: S&P 500, QQQ, Gold, Brent, VIX)
+# 상단 메트릭 위젯 (5열 배치: S&P 500, QQQ, Gold, WTI, VIX)
 # ===========================================================================
-metric_keys = ["SPY", "QQQ", "GLD", "BNO", "^VIX"]
+metric_keys = ["SPY", "QQQ", "GLD", "CL=F", "^VIX"]
 cols = st.columns(5)
 
 for col, key in zip(cols, metric_keys):
@@ -390,7 +390,6 @@ for col, key in zip(cols, metric_keys):
     change = data.get("change_pct", "N/A")
     time_val = data.get("time", "")
 
-    # US 지수(SPY, QQQ)와 VIX에만 장 상태 표시
     status_to_show = market_status if key in ["SPY", "QQQ", "^VIX"] else None
 
     with col:
@@ -412,8 +411,7 @@ if menu == "Overview":
     # -------------------------------------------------------------------
     st.markdown("### 🤖 AI Market Advisor (종합 투자 전략)")
     
-    with st.spinner("AI가 최신 전략을 준비 중..."):
-        ai_advice = load_gemini_25_market_report(macro_data, intelligence_data, liquidity_data, gemini_api_key)
+    ai_advice = load_gemini_25_market_report(macro_data, intelligence_data, liquidity_data, gemini_api_key)
     
     # AI 어드바이스 박스 (스타일 적용)
     st.markdown(
@@ -903,7 +901,7 @@ elif menu == "M6 Correlation":
     )
 
     # 실제 자산 상관관계 (yfinance)
-    assets = ["SPY", "QQQ", "GLD", "TLT", "BNO", "BTC-USD"]
+    assets = ["SPY", "QQQ", "GLD", "TLT", "CL=F", "BTC-USD"]
     corr_df = load_correlation_data(assets)
 
     if corr_df.empty:

@@ -28,7 +28,7 @@ def get_macro_data(av_api_key: str = "") -> Dict[str, Dict[str, Any]]:
         "SPY": "S&P 500",
         "QQQ": "QQQ",
         "GLD": "Gold",
-        "BNO": "Brent Oil",  # BNO는 Brent 원유 ETF
+        "CL=F": "WTI Crude",  # WTI 원유 선물
         "^VIX": "VIX",
     }
 
@@ -346,7 +346,7 @@ def get_correlation_data(tickers: List[str] = None, period: str = "1y") -> pd.Da
     주어진 자산들의 과거 가격 데이터를 바탕으로 수익률 상관관계를 계산합니다.
     """
     if tickers is None:
-        tickers = ["SPY", "QQQ", "GLD", "TLT", "BNO", "BTC-USD"]
+        tickers = ["SPY", "QQQ", "GLD", "TLT", "CL=F", "BTC-USD"]
 
     try:
         data = yf.download(tickers, period=period, progress=False)["Close"]
