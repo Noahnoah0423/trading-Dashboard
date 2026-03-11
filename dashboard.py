@@ -17,7 +17,6 @@ import numpy as np
 import json
 from datetime import datetime
 
-# 로컬 모듈 임포트
 from data_fetcher import (
     get_macro_data, 
     get_short_squeeze_data,
@@ -25,7 +24,10 @@ from data_fetcher import (
     get_money_flow_data,
     get_insider_trading_data,
     get_gdelt_news,
-    analyze_news_with_gemini
+    analyze_news_with_gemini,
+    get_sector_etf_data,
+    get_tga_data,
+    get_fred_liquidity_data
 )
 from social_fetcher import get_combined_social_feed, analyze_social_with_gemini
 
@@ -211,6 +213,13 @@ def load_gemini_25_market_report(macro_data, news_data, liquidity_data, gemini_a
     """Gemini 2.5 Flash 기반 투자 조언 캐싱 (12시간 갱신)"""
     from data_fetcher import get_ai_market_advice
     return get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key)
+
+
+@st.cache_data(ttl=604800, show_spinner=False)
+def load_sector_etf_data():
+    """미국 11개 주요 섹터 ETF 주간 수익률/모멘텀 등 실데이터 캐싱 (1주일 갱신)"""
+    return get_sector_etf_data()
+
 
 
 @st.cache_data(ttl=43200, show_spinner=False)
@@ -507,21 +516,60 @@ if menu == "Overview":
         tga_df = pd.DataFrame(tga_hist)
         fed_df = pd.DataFrame(fed_hist)
         
+        tga_df["date"] = pd.to_datetime(tga_df["date"])
+        fed_df["date"] = pd.to_datetime(fed_df["date"])
+        
+        # 날짜 필터 추가
+        min_date = max(tga_df["date"].min(), fed_df["date"].min()).date()
+        max_date = min(tga_df["date"].max(), fed_df["date"].max()).date()
+        
+        # 디폴트는 최근 6개월
+        default_start = max_date - datetime.timedelta(days=180)
+        
+        # 컬럼을 나누어 날짜 선택창을 작게 표시
+        dcol1, dcol2 = st.columns([1, 2])
+        with dcol1:
+            try:
+                date_range = st.date_input("조회 기간 선택:", value=(default_start, max_date), min_value=min_date, max_value=max_date, key="liquidity_date_range")
+            except Exception:
+                date_range = (default_start, max_date)
+            
+        if isinstance(date_range, tuple) and len(date_range) == 2:
+            start_dt, end_dt = date_range
+        else:
+            start_dt, end_dt = default_start, max_date
+            
+        # 데이터프레임 필터링
+        tga_filtered = tga_df[(tga_df["date"].dt.date >= start_dt) & (tga_df["date"].dt.date <= end_dt)]
+        fed_filtered = fed_df[(fed_df["date"].dt.date >= start_dt) & (fed_df["date"].dt.date <= end_dt)]
+        
         c1, c2 = st.columns(2)
         
         with c1:
-            fig_tga = px.area(tga_df, x="date", y="value", title="TGA Balance ($B)",
+            fig_tga = px.area(tga_filtered, x="date", y="value", title="TGA Balance ($B)",
                              template="plotly_dark", color_discrete_sequence=["#ffaa00"])
             fig_tga.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=300)
             st.plotly_chart(fig_tga, use_container_width=True)
             
         with c2:
-            fig_fed = px.line(fed_df, x="date", y="value", title="Fed Total Assets ($T)",
+            fig_fed = px.line(fed_filtered, x="date", y="value", title="Fed Total Assets ($T)",
                              template="plotly_dark", color_discrete_sequence=["#00d4aa"])
             fig_fed.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=300)
             st.plotly_chart(fig_fed, use_container_width=True)
-    
-    st.markdown("---")
+
+        # 유동성 지표 해석 설명 추가
+        st.markdown(
+            f"""
+            <div style='background-color: #1a1f2e; padding: 15px; border-radius: 8px; border-left: 4px solid #8892a4; margin-top: 5px; margin-bottom: 20px;'>
+                <p style='margin: 0; font-size: 0.95rem; color: #c0c8d8;'>
+                    💡 <b>유동성 지표 해석 가이드</b><br>
+                    <span style='color: #ffaa00;'><b>TGA(재무부 일반계정)의 감소</b></span>는 시중에 정부 자금이 풀려 유동성이 공급됨을 의미하며, 
+                    <span style='color: #00d4aa;'><b>연준 대차대조표(Fed Assets)의 증가</b></span>는 양적완화(QE)를 뜻합니다. 
+                    이 두 지표의 합산 <b>순유동성(Net Liquidity)이 증가하는 추세라면 주식시장에 상승 압력(Risk-On)</b>이 제한적으로나마 조성되고 있음을 나타냅니다.
+                </p>
+            </div>
+            """, unsafe_allow_html=True
+        )
 
     st.markdown("---")
     # -------------------------------------------------------------------
@@ -533,73 +581,63 @@ if menu == "Overview":
         unsafe_allow_html=True,
     )
 
-    # 버블 차트용 데이터 (데모용 시뮬레이션)
-    np.random.seed(42)
-    sectors = [
-        "Technology", "Healthcare", "Financials", "Energy",
-        "Consumer Disc.", "Industrials", "Materials", "Utilities",
-        "Real Estate", "Comm. Services",
-    ]
-    bubble_df = pd.DataFrame({
-        "Sector": sectors,
-        "Return (%)": np.random.uniform(-5, 15, len(sectors)).round(2),
-        "Volatility (%)": np.random.uniform(5, 30, len(sectors)).round(2),
-        "Market Cap ($B)": np.random.uniform(50, 500, len(sectors)).round(0),
-        "Momentum Score": np.random.uniform(0.3, 1.0, len(sectors)).round(2),
-    })
+    # 버블 차트용 데이터 (실시간 미국 섹터 ETF)
+    bubble_df = load_sector_etf_data()
 
-    # Plotly 버블 차트
-    fig = px.scatter(
-        bubble_df,
-        x="Return (%)",
-        y="Volatility (%)",
-        size="Market Cap ($B)",
-        color="Momentum Score",
-        hover_name="Sector",
-        size_max=60,
-        color_continuous_scale="Turbo",
-        title="",
-    )
-    fig.update_layout(
-        plot_bgcolor="#0e1117",
-        paper_bgcolor="#0e1117",
-        font=dict(color="#c0c8d8", size=13),
-        xaxis=dict(
-            gridcolor="#1e2538",
-            zerolinecolor="#2d3548",
-            title_font=dict(size=14),
-        ),
-        yaxis=dict(
-            gridcolor="#1e2538",
-            zerolinecolor="#2d3548",
-            title_font=dict(size=14),
-        ),
-        coloraxis_colorbar=dict(
-            title="Momentum",
-            tickfont=dict(color="#8892a4"),
-            title_font=dict(color="#8892a4"),
-        ),
-        height=500,
-        margin=dict(l=40, r=40, t=20, b=40),
-    )
-    fig.update_traces(
-        marker=dict(line=dict(width=1, color="#2d3548")),
-    )
+    if not bubble_df.empty:
+        # Plotly 버블 차트
+        fig = px.scatter(
+            bubble_df,
+            x="Return (%)",
+            y="Volatility (%)",
+            size="Market Cap ($B)",
+            color="Momentum Score",
+            hover_name="Sector",
+            text="Ticker",
+            size_max=60,
+            color_continuous_scale="Turbo",
+            title="",
+        )
+        fig.update_layout(
+            plot_bgcolor="#0e1117",
+            paper_bgcolor="#0e1117",
+            font=dict(color="#c0c8d8", size=13),
+            xaxis=dict(
+                gridcolor="#1e2538",
+                zerolinecolor="#2d3548",
+                title_font=dict(size=14),
+            ),
+            yaxis=dict(
+                gridcolor="#1e2538",
+                zerolinecolor="#2d3548",
+                title_font=dict(size=14),
+            ),
+            coloraxis_colorbar=dict(
+                title="Momentum",
+                tickfont=dict(color="#8892a4"),
+                title_font=dict(color="#8892a4"),
+            ),
+            height=500,
+            margin=dict(l=40, r=40, t=20, b=40),
+        )
+        fig.update_traces(
+            marker=dict(line=dict(width=1, color="#2d3548")),
+            textposition='top center'
+        )
 
-    st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
-    # -------------------------------------------------------------------
-    # Sector Attractiveness Analysis (새로 추가된 기능)
-    # -------------------------------------------------------------------
-    st.markdown("#### ✨ Sector Attractiveness Insight")
-    
-    # 투자 매력도 스코어 계산 (Score = Return * Momentum / Volatility)
-    # Volatility가 0에 가까운 경우를 방지
-    attr_df = bubble_df.copy()
-    attr_df["Attractiveness Score"] = (attr_df["Return (%)"] * attr_df["Momentum Score"]) / attr_df["Volatility (%)"].replace(0, 0.1)
-    
-    best_sector = attr_df.loc[attr_df["Attractiveness Score"].idxmax()]
-    worst_sector = attr_df.loc[attr_df["Attractiveness Score"].idxmin()]
+        # -------------------------------------------------------------------
+        # Sector Attractiveness Analysis
+        # -------------------------------------------------------------------
+        st.markdown("#### ✨ Sector Attractiveness Insight")
+        
+        # 투자 매력도 스코어 계산 (Score = Return * Momentum / Volatility)
+        attr_df = bubble_df.copy()
+        attr_df["Attractiveness Score"] = (attr_df["Return (%)"] * attr_df["Momentum Score"]) / attr_df["Volatility (%)"].replace(0, 0.1)
+        
+        best_sector = attr_df.loc[attr_df["Attractiveness Score"].idxmax()]
+        worst_sector = attr_df.loc[attr_df["Attractiveness Score"].idxmin()]
     
     st.markdown(
         f"""
@@ -625,28 +663,31 @@ if menu == "Overview":
     )
 
     # -------------------------------------------------------------------
-    # 하단: 시장 데이터 요약 테이블
+    # 하단: 시장 데이터 요약 테이블 (Major Sector ETFs)
     # -------------------------------------------------------------------
-    st.markdown("### 📋 Market Summary Table")
+    st.markdown("### 📋 US Market Sectors Summary")
 
-    summary_rows = []
-    for key in metric_keys:
-        d = macro_data.get(key, {})
-        price = d.get("price", "N/A")
-        change = d.get("change_pct", "N/A")
-        if isinstance(change, (int, float)):
+    if not bubble_df.empty:
+        summary_rows = []
+        for _, row in bubble_df.iterrows():
+            change = row['Return (%)']
             status = "🟢 Up" if change > 0 else ("🔴 Down" if change < 0 else "⚪ Flat")
-        else:
-            status = "❓ N/A"
-        summary_rows.append({
-            "Asset": d.get("name", key),
-            "Price": f"${price:,.2f}" if isinstance(price, (int, float)) else "N/A",
-            "Change (%)": f"{change:+.2f}%" if isinstance(change, (int, float)) else "N/A",
-            "Status": status,
-        })
+            
+            summary_rows.append({
+                "Sector": row["Sector"],
+                "Ticker": row["Ticker"],
+                "Price": f"${row['Price']:,.2f}",
+                "5D Change (%)": f"{change:+.2f}%",
+                "Status": status,
+                "Volatility (%)": f"{row['Volatility (%)']}%"
+            })
 
-    summary_df = pd.DataFrame(summary_rows)
-    st.table(summary_df)
+        summary_df = pd.DataFrame(summary_rows)
+        # 5일 수익률 높은 순으로 정렬
+        summary_df = summary_df.sort_values(by="5D Change (%)", ascending=False).reset_index(drop=True)
+        st.dataframe(summary_df, use_container_width=True)
+    else:
+        st.info("섹터 데이터를 불러오는 중 오류가 발생하여 테이블을 표출할 수 없습니다.")
 
 
 elif menu == "Intelligence Feed":
@@ -1027,20 +1068,36 @@ elif menu == "Insider Trading":
         if insider_df.empty:
             st.warning(f"{insider_ticker}의 최근 내부자 거래 데이터가 없거나 수집할 수 없습니다.")
         else:
-            # yfinance insider_transactions 컬럼 정리 (예: Start Date, Shares, Text)
-            st.markdown(f"#### recent transactions for {insider_ticker}")
-            st.dataframe(insider_df)
+            # 날짜형식 변환 및 필터링 옵션 제공
+            if "Start Date" in insider_df.columns:
+                insider_df["Start Date"] = pd.to_datetime(insider_df["Start Date"], errors="coerce")
+                min_date = insider_df["Start Date"].min().date()
+                max_date = insider_df["Start Date"].max().date()
+                
+                # 기본적으로 최근 1년 조회
+                default_start = max(min_date, max_date - datetime.timedelta(days=365))
+                
+                date_filter = st.date_input("조회 기간 선택:", value=(default_start, max_date), min_value=min_date, max_value=max_date, key="insider_date")
+                
+                if isinstance(date_filter, tuple) and len(date_filter) == 2:
+                    start_dt, end_dt = date_filter
+                    insider_df = insider_df[(insider_df["Start Date"].dt.date >= start_dt) & (insider_df["Start Date"].dt.date <= end_dt)]
             
-            # 주식 거래량(Shares) 숫자형 변환 후 매수/매도 필터링
-            if "Shares" in insider_df.columns:
+            st.markdown(f"#### recent transactions for {insider_ticker}")
+            st.dataframe(insider_df, use_container_width=True)
+            
+            # 거래량 및 매수/매도 필터링
+            if "Shares" in insider_df.columns and "Text" in insider_df.columns:
                 insider_df["Shares_Num"] = pd.to_numeric(insider_df["Shares"], errors="coerce").fillna(0)
                 
-                # yfinance 데이터 특성상, 양수는 매수, 음수는 매도 (형식이 다를 수 있어 유의)
-                buys = insider_df[insider_df["Shares_Num"] > 0]
-                sells = insider_df[insider_df["Shares_Num"] < 0]
+                # 매수/매도 구분: Text 컬럼의 문구 기준 판별
+                # Buy, Purchase, Stock Gift -> 매수 (긍정적 시그널 또는 지분 확보)
+                # Sale, Sell -> 매도
+                buys = insider_df[insider_df["Text"].str.contains("Buy|Purchase|Gift", case=False, na=False)]
+                sells = insider_df[insider_df["Text"].str.contains("Sale|Sell", case=False, na=False)]
                 
                 total_buy = buys["Shares_Num"].sum()
-                total_sell = abs(sells["Shares_Num"].sum())
+                total_sell = sells["Shares_Num"].sum()
                 
                 col1, col2 = st.columns(2)
                 with col1:
@@ -1062,7 +1119,7 @@ elif menu == "Insider Trading":
                         """, unsafe_allow_html=True
                     )
             else:
-                st.info("거래량(Shares) 정보를 분석할 수 없습니다.")
+                st.info("거래량(Shares) 또는 텍스트 정보를 분석할 수 없어 총계를 계산할 수 없습니다.")
 
 
 # ===========================================================================

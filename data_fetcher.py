@@ -145,8 +145,8 @@ def get_tga_data() -> Dict[str, Any]:
             latest_val = float(df[value_col].iloc[-1]) / 1000  # Millions → Billions
             latest_date = df[date_col].iloc[-1].strftime('%Y-%m-%d')
             
-            # 최근 90일 데이터 (차트용)
-            recent = df.tail(90)
+            # 최근 5년 데이터 (차트용)
+            recent = df.tail(5 * 365)
             history = [{"date": row[date_col].strftime('%Y-%m-%d'), "value": float(row[value_col]) / 1000} for _, row in recent.iterrows()]
             
             return {
@@ -177,8 +177,8 @@ def get_fred_liquidity_data() -> Dict[str, Any]:
             latest_val = float(df[value_col].iloc[-1]) / 1000000  # Millions → Trillions
             latest_date = df[date_col].iloc[-1].strftime('%Y-%m-%d')
             
-            # 최근 90일 데이터 (차트용)
-            recent = df.tail(90)
+            # 최근 5년 데이터 (차트용)
+            recent = df.tail(5 * 365)
             history = [{"date": row[date_col].strftime('%Y-%m-%d'), "value": float(row[value_col]) / 1000000} for _, row in recent.iterrows()]
             
             return {
@@ -190,6 +190,79 @@ def get_fred_liquidity_data() -> Dict[str, Any]:
         print(f"Error fetching Fed Assets (WALCL): {e}")
     return {"latest_value": 0, "date": "N/A", "history": []}
 
+def get_sector_etf_data() -> pd.DataFrame:
+    """미국 11개 주요 섹터 ETF의 실시간 가격, 5일 수익률, 변동성, 시가총액, 모멘텀을 수집합니다."""
+    sectors = {
+        "XLK": "Technology", "XLV": "Healthcare", "XLF": "Financials", 
+        "XLE": "Energy", "XLY": "Consumer Disc.", "XLI": "Industrials", 
+        "XLB": "Materials", "XLP": "Consumer Staples", "XLU": "Utilities", 
+        "XLRE": "Real Estate", "XLC": "Comm. Services"
+    }
+    
+    tickers = list(sectors.keys())
+    
+    try:
+        data = yf.download(tickers, period="6mo", progress=False)["Close"]
+        
+        results = []
+        for ticker_symbol in tickers:
+            try:
+                if ticker_symbol not in data.columns:
+                    continue
+                    
+                series = data[ticker_symbol].dropna()
+                if len(series) < 20:
+                    continue
+                    
+                # yf.Ticker로 현재 시가총액 가져오기
+                ticker_obj = yf.Ticker(ticker_symbol)
+                info = ticker_obj.info
+                # totalAssets가 없으면 marketCap을, 둘다 없으면 기본값 50B 사용
+                mcap = info.get("totalAssets", info.get("marketCap", 50000000000)) / 1_000_000_000
+                
+                # 최근 5일(1주일) 수익률 계산
+                recent_return = ((series.iloc[-1] - series.iloc[-6]) / series.iloc[-6]) * 100
+                
+                # 6개월 변동성 계산 (일일 수익률 표준편차의 연율화)
+                daily_pct_change = series.pct_change().dropna()
+                volatility = daily_pct_change.std() * np.sqrt(252) * 100
+                
+                # 3개월(약 63일) 모멘텀 계산
+                if len(series) > 63:
+                    momentum = ((series.iloc[-1] - series.iloc[-63]) / series.iloc[-63])
+                else:
+                    momentum = ((series.iloc[-1] - series.iloc[0]) / series.iloc[0])
+                    
+                results.append({
+                    "Ticker": ticker_symbol,
+                    "Sector": sectors[ticker_symbol],
+                    "Price": series.iloc[-1],
+                    "Return (%)": round(recent_return, 2),
+                    "Volatility (%)": round(volatility, 2),
+                    "Market Cap ($B)": round(mcap, 1),
+                    "Raw Momentum": momentum
+                })
+            except Exception as e:
+                print(f"[WARNING] Error processing sector ETF {ticker_symbol}: {e}")
+                
+        df = pd.DataFrame(results)
+        
+        if not df.empty:
+            # Momentum Score를 0~1 사이로 Min-Max 정규화
+            min_mom = df["Raw Momentum"].min()
+            max_mom = df["Raw Momentum"].max()
+            if max_mom != min_mom:
+                df["Momentum Score"] = ((df["Raw Momentum"] - min_mom) / (max_mom - min_mom)).round(2)
+            else:
+                df["Momentum Score"] = 0.5
+                
+            df = df.drop(columns=["Raw Momentum"])
+            
+        return df
+        
+    except Exception as e:
+        print(f"Error fetching sector ETF data: {e}")
+        return pd.DataFrame()
 
 
 def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
