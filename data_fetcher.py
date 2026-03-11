@@ -292,8 +292,9 @@ def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
         liq_summary = f"TGA: ${liquidity_data['tga']['latest_value']}B, Fed Assets: ${liquidity_data['fed']['latest_value']}T"
         
         prompt = f"""
-        당신은 헤지펀드 수석 전략가입니다. 다음 실시간 시장 데이터를 바탕으로 투자 포트폴리오 전략을 제시하세요.
-        
+        당신은 세계 최고의 헤지펀드 수석 전략가이자 슈퍼포캐스터(Superforecaster)입니다. 
+        제공된 실시간 데이터와 뉴스를 바탕으로 투자 포트폴리오 전략 보고서를 작성하세요.
+
         [시장 지표]
         {macro_summary}
         
@@ -303,16 +304,38 @@ def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
         [주요 뉴스 개요]
         {news_summary}
         
-        지침:
-        1. 현재 시장의 위험 수준을 평가하세요.
-        2. 포트폴리오 비중 확대(Overweight) 또는 축소(Underweight) 의견을 명확히 하세요.
-        3. 추천 자산군(주식, 채권, 금, 원유 등)과 이유를 설명하세요.
-        4. 한국어로 친절하면서도 전문적인 톤으로 답변하세요.
-        5. 답변은 마크다운 형식을 사용하고, 짧고 강렬하게 핵심만 짚어주세요.
+        [지시사항]
+        1. **다각도 내부 토론**: 결과를 도출하기 전, 현재 상황을 [낙관적 견해], [비관적 견해], [중립적 견해] 3가지 상반된 관점에서 각각 1문장씩 내부적으로 치열하게 분석하고 요약하세요.
+        2. **보고서 작성**: 위 토론을 바탕으로 최종 결론을 도출하여 다음의 **[마크다운 양식]**을 엄격히 준수하여 출력하세요.
+        
+        [마크다운 양식 필수 준수]
+        ### **[헤지펀드 투자 포트폴리오 전략]**
+        
+        **(💡 AI 다각도 분석: 낙관/비관/중립 관점의 핵심 요약 1~2줄)**
+        
+        **1. 현재 시장의 위험 수준 평가:**
+        - (현재 위험 등급: 예: '매우 높음', '중립', '낮음')
+        - (이유 3~4가지를 불릿 포인트로 상세히 설명)
+        
+        **2. 포트폴리오 비중 확대/축소 의견:**
+        - **주식 (Equities):** (Overweight / Underweight / Neutral)
+        - **채권 (Fixed Income):** (Overweight / Underweight / Neutral)
+        - **금 (Gold):** (Overweight / Underweight / Neutral)
+        - **원유 (Crude Oil):** (Overweight / Underweight / Neutral)
+        - **현금 (Cash):** (Overweight / Underweight / Neutral)
+        
+        **3. 추천 자산군 및 이유:**
+        - (각 자산군별로 왜 그런 비중을 추천하는지 구체적인 매크로/데이터 근거 제시)
+        
+        ---
+        **결론:**
+        (전체 전략을 1~2문장으로 압축 요약)
+        
+        지침: 한국어로 전문적이고 신뢰감 있는 톤을 유지하세요. 핵심 위주로 강렬하게 작성하세요.
         """
         
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.0-flash", # 최신 안정화 모델 사용
             contents=prompt,
         )
         return response.text
@@ -720,6 +743,58 @@ def analyze_news_with_gemini(news_list, api_key):
         error_msg = str(e)
         print(f"Gemini Analysis Error: {error_msg}")
         return f"Gemini API Error: {error_msg}"
+
+
+def analyze_liquidity_with_gemini(tga_df: pd.DataFrame, fed_df: pd.DataFrame, api_key: str) -> str:
+    """
+    TGA와 연준 대차대조표 데이터를 기반으로 현재 유동성 환경을 AI로 분석합니다.
+    낙관/비관/중립의 3가지 관점에서 토론 후 최종 결론을 도출합니다.
+    """
+    if not api_key:
+        return "Gemini API Key가 설정되지 않았습니다."
+    
+    try:
+        # 최근 데이터 추출 (최근 30일 및 현재 수치)
+        latest_tga = tga_df.iloc[-1]
+        latest_fed = fed_df.iloc[-1]
+        
+        prev_tga = tga_df.iloc[-22] if len(tga_df) > 22 else tga_df.iloc[0]
+        prev_fed = fed_df.iloc[-5] if len(fed_df) > 5 else fed_df.iloc[0] # WALCL은 주간 데이터
+        
+        tga_val = latest_tga['value']
+        fed_val = latest_fed['value']
+        
+        tga_change = tga_val - prev_tga['value']
+        fed_change = fed_val - prev_fed['value']
+        
+        net_liquidity = fed_val - (tga_val / 1000) # WALCL은 $T 단위, TGA는 $B 단위이므로 변환
+        
+        prompt = f"""
+        당신은 금융 시장 유동성 분석 전문가입니다. 아래의 연준(Fed) 및 재무부(TGA) 유동성 데이터를 분석하여 시장 영향력을 리포트하세요.
+
+        [데이터 현황]
+        - 현재 TGA 잔고: ${tga_val:.2f}B (최근 1개월 증감: {tga_change:+.2f}B)
+        - 현재 연준 총자산(WALCL): ${fed_val:.2f}T (최근 1개월 증감: {fed_change:+.2f}T)
+        - 단순 계산 순유동성(Fed Assets - TGA): 약 ${net_liquidity:.2f}T
+        
+        [지시사항]
+        1. 먼저 이 데이터를 기반으로 다음 3가지 관점에서 내부 토론을 거치세요:
+           - [낙관적 견해]: 유동성이 공급되거나 하방이 지지되는 이유
+           - [비관적 견해]: 유동성 축소 혹은 시장 리스크가 발생하는 이유
+           - [중립적 견해]: 데이터의 노이즈나 일시적 현상에 대한 해석
+        2. 위 3가지 관점을 종합하여, 최종적으로 현재 유동성 환경이 주식 시장(S&P500, Nasdaq)에 미칠 단기적 영향을 분석하세요.
+        3. 결과는 한국어로 가독성 있게 마크다운 형식으로 작성하세요.
+        """
+        
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash') # 최신 모델 사용
+        response = model.generate_content(prompt)
+        
+        return response.text
+        
+    except Exception as e:
+        print(f"[ERROR] Liquidity Analysis Error: {e}")
+        return f"유동성 분석 중 오류가 발생했습니다: {str(e)}"
 
 
 # ---------------------------------------------------------------------------

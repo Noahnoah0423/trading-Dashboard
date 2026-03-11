@@ -27,7 +27,8 @@ from data_fetcher import (
     analyze_news_with_gemini,
     get_sector_etf_data,
     get_tga_data,
-    get_fred_liquidity_data
+    get_fred_liquidity_data,
+    analyze_liquidity_with_gemini
 )
 from social_fetcher import get_combined_social_feed, analyze_social_with_gemini
 
@@ -196,6 +197,12 @@ def load_ticker_history_data(ticker, period="1y"):
     """티커 시계열 데이터 캐싱 (1시간 갱신)"""
     from data_fetcher import get_ticker_history
     return get_ticker_history(ticker, period)
+
+
+@st.cache_data(ttl=43200, show_spinner=False) # 12시간 캐시
+def load_liquidity_analysis(tga_df, fed_df, api_key):
+    """유동성 지표의 다각도 AI 분석 결과를 캐싱"""
+    return analyze_liquidity_with_gemini(tga_df, fed_df, api_key)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -557,19 +564,20 @@ if menu == "Overview":
             fig_fed.update_layout(margin=dict(l=20, r=20, t=40, b=20), height=300)
             st.plotly_chart(fig_fed, use_container_width=True)
 
-        # 유동성 지표 해석 설명 추가
-        st.markdown(
-            f"""
-            <div style='background-color: #1a1f2e; padding: 15px; border-radius: 8px; border-left: 4px solid #8892a4; margin-top: 5px; margin-bottom: 20px;'>
-                <p style='margin: 0; font-size: 0.95rem; color: #c0c8d8;'>
-                    💡 <b>유동성 지표 해석 가이드</b><br>
-                    <span style='color: #ffaa00;'><b>TGA(재무부 일반계정)의 감소</b></span>는 시중에 정부 자금이 풀려 유동성이 공급됨을 의미하며, 
-                    <span style='color: #00d4aa;'><b>연준 대차대조표(Fed Assets)의 증가</b></span>는 양적완화(QE)를 뜻합니다. 
-                    이 두 지표의 합산 <b>순유동성(Net Liquidity)이 증가하는 추세라면 주식시장에 상승 압력(Risk-On)</b>이 제한적으로나마 조성되고 있음을 나타냅니다.
-                </p>
-            </div>
-            """, unsafe_allow_html=True
-        )
+        # 💡 유동성 지표 해석 가이즈 (Gemini AI 연동)
+        st.markdown("---")
+        st.markdown("#### 🧠 AI Liquidity Environment Analysis")
+        with st.spinner("AI가 유동성 데이터를 다각도로 분석 중입니다..."):
+            liquidity_insight = load_liquidity_analysis(tga_df, fed_df, gemini_api_key)
+            
+            st.markdown(
+                f"""
+                <div style='background-color: #1a1f2e; padding: 20px; border-radius: 10px; border-left: 5px solid #4e88ff; line-height: 1.6;'>
+                    {liquidity_insight}
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
     st.markdown("---")
     # -------------------------------------------------------------------
