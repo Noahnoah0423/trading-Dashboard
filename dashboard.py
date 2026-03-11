@@ -676,17 +676,46 @@ if menu == "Overview":
             summary_rows.append({
                 "Sector": row["Sector"],
                 "Ticker": row["Ticker"],
-                "Price": f"${row['Price']:,.2f}",
-                "5D Change (%)": f"{change:+.2f}%",
+                "Price": row["Price"],  # 숫자 그대로 유지하여 정렬 및 포맷 지원
+                "5D Change (%)": change,
                 "Status": status,
-                "Volatility (%)": f"{row['Volatility (%)']}%",
-                "_Raw Change": change  # 정렬을 위한 숨겨진/임시 컬럼
+                "Volatility (%)": row['Volatility (%)'],
+                "_Raw Change": change
             })
 
         summary_df = pd.DataFrame(summary_rows)
         # 5일 수익률(숫자) 높은 순으로 정렬 후 임시 컬럼 삭제
         summary_df = summary_df.sort_values(by="_Raw Change", ascending=False).drop(columns=["_Raw Change"]).reset_index(drop=True)
-        st.dataframe(summary_df, use_container_width=True)
+        
+        # st.column_config를 활용한 시각화 업그레이드
+        st.dataframe(
+            summary_df,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Sector": st.column_config.TextColumn("Sector Name", width="medium"),
+                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                "Price": st.column_config.NumberColumn(
+                    "Price", 
+                    format="$%.2f", 
+                    width="small"
+                ),
+                "5D Change (%)": st.column_config.NumberColumn(
+                    "5D Change",
+                    help="Recent 5-day return",
+                    format="%+.2f%%",
+                    width="small"
+                ),
+                "Status": st.column_config.TextColumn("Status", width="small"),
+                "Volatility (%)": st.column_config.ProgressColumn(
+                    "Volatility (Risk)",
+                    help="6-month annualized volatility",
+                    format="%.2f%%",
+                    min_value=0,
+                    max_value=max(30, float(summary_df["Volatility (%)"].max())) # 프로그레스 바 최대치 설정
+                )
+            }
+        )
     else:
         st.info("섹터 데이터를 불러오는 중 오류가 발생하여 테이블을 표출할 수 없습니다.")
 
