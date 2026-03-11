@@ -12,6 +12,7 @@ import numpy as np
 from typing import Dict, List, Any
 import requests
 import json
+import google.generativeai as genai
 import urllib.parse
 from datetime import datetime, timedelta
 import re
@@ -335,7 +336,7 @@ def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
         """
         
         response = client.models.generate_content(
-            model="gemini-2.0-flash", # 최신 안정화 모델 사용
+            model="gemini-2.5-flash", # 최신 모델로 복구
             contents=prompt,
         )
         return response.text
@@ -787,7 +788,7 @@ def analyze_liquidity_with_gemini(tga_df: pd.DataFrame, fed_df: pd.DataFrame, ap
         """
         
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash') # 최신 모델 사용
+        model = genai.GenerativeModel('gemini-2.5-flash') # 최신 모델로 복구
         response = model.generate_content(prompt)
         
         return response.text
