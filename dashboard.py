@@ -725,7 +725,8 @@ if menu == "Overview":
             }
         )
     else:
-        st.info("섹터 데이터를 불러오는 중 오류가 발생하여 테이블을 표출할 수 없습니다.")
+        st.warning("⚠️ 섹터 데이터를 불러오는 중 일시적인 오류가 발생했습니다. 잠시 후 상단의 'Force Clear Cache' 버튼을 눌러 다시 시도해 주세요.")
+        st.info("💡 yfinance API의 일시적인 제한일 수 있습니다. (시가총액 등 일부 데이터는 미리 정의된 안전한 값을 사용하도록 보강되었습니다.)")
 
 
 elif menu == "Intelligence Feed":

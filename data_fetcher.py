@@ -201,70 +201,93 @@ def get_sector_etf_data() -> pd.DataFrame:
         "XLRE": "Real Estate", "XLC": "Comm. Services"
     }
     
-    tickers = list(sectors.keys())
+    # 섹터별 대략적인 시가총액 ($B) - 고정값 또는 폴백용 (info 호출 방지)
+    mcap_map = {
+        "XLF": 40.5, "XLK": 70.2, "XLE": 38.4, "XLV": 42.1, "XLI": 18.2, 
+        "XLY": 21.3, "XLB": 6.5, "XLP": 16.8, "XLU": 15.4, "XLRE": 5.2, "XLC": 25.1
+    }
     
-    try:
-        data = yf.download(tickers, period="6mo", progress=False)["Close"]
-        
-        results = []
-        for ticker_symbol in tickers:
-            try:
-                if ticker_symbol not in data.columns:
-                    continue
-                    
-                series = data[ticker_symbol].dropna()
-                if len(series) < 20:
-                    continue
-                    
-                # yf.Ticker로 현재 시가총액 가져오기
-                ticker_obj = yf.Ticker(ticker_symbol)
-                info = ticker_obj.info
-                # totalAssets가 없으면 marketCap을, 둘다 없으면 기본값 50B 사용
-                mcap = info.get("totalAssets", info.get("marketCap", 50000000000)) / 1_000_000_000
+    tickers = list(sectors.keys())
+    data = pd.DataFrame()
+    
+    # 1) 전체 데이터 다운로드 (최대 2회 재시도)
+    for attempt in range(2):
+        try:
+            data = yf.download(tickers, period="6mo", progress=False)
+            if not data.empty:
+                # 데이터가 Series 형태인 경우(단일 티커) 처리
+                if isinstance(data, pd.Series):
+                    data = data.to_frame()
                 
-                # 최근 5일(1주일) 수익률 계산
-                recent_return = ((series.iloc[-1] - series.iloc[-6]) / series.iloc[-6]) * 100
-                
-                # 6개월 변동성 계산 (일일 수익률 표준편차의 연율화)
-                daily_pct_change = series.pct_change().dropna()
-                volatility = daily_pct_change.std() * np.sqrt(252) * 100
-                
-                # 3개월(약 63일) 모멘텀 계산
-                if len(series) > 63:
-                    momentum = ((series.iloc[-1] - series.iloc[-63]) / series.iloc[-63])
+                # 멀티인덱스 컬럼 처리 (yf 버전에 따라 다름)
+                if isinstance(data.columns, pd.MultiIndex):
+                    data = data["Close"]
                 else:
-                    momentum = ((series.iloc[-1] - series.iloc[0]) / series.iloc[0])
-                    
-                results.append({
-                    "Ticker": ticker_symbol,
-                    "Sector": sectors[ticker_symbol],
-                    "Price": series.iloc[-1],
-                    "Return (%)": round(recent_return, 2),
-                    "Volatility (%)": round(volatility, 2),
-                    "Market Cap ($B)": round(mcap, 1),
-                    "Raw Momentum": momentum
-                })
-            except Exception as e:
-                print(f"[WARNING] Error processing sector ETF {ticker_symbol}: {e}")
+                    # 'Close' 필드가 있는지 확인
+                    if "Close" in data:
+                        data = data["Close"]
                 
-        df = pd.DataFrame(results)
-        
-        if not df.empty:
-            # Momentum Score를 0~1 사이로 Min-Max 정규화
-            min_mom = df["Raw Momentum"].min()
-            max_mom = df["Raw Momentum"].max()
-            if max_mom != min_mom:
-                df["Momentum Score"] = ((df["Raw Momentum"] - min_mom) / (max_mom - min_mom)).round(2)
-            else:
-                df["Momentum Score"] = 0.5
-                
-            df = df.drop(columns=["Raw Momentum"])
+                if not data.empty:
+                    break
+        except Exception as e:
+            print(f"[RETRY {attempt+1}] Sector download failure: {e}")
             
-        return df
-        
-    except Exception as e:
-        print(f"Error fetching sector ETF data: {e}")
+    if data.empty:
+        print("[ERROR] All attempts to fetch sector data failed.")
         return pd.DataFrame()
+    
+    results = []
+    for ticker_symbol in tickers:
+        try:
+            if ticker_symbol not in data.columns:
+                continue
+                
+            series = data[ticker_symbol].dropna()
+            if len(series) < 6: # 최소 1주일치 필요
+                continue
+                
+            # yf.Ticker(t).info를 호출하지 않고 맵 사용 (차단 방지 핵심)
+            mcap = mcap_map.get(ticker_symbol, 50.0)
+            
+            # 최근 5일(1주일) 수익률 계산
+            recent_return = ((series.iloc[-1] - series.iloc[-6]) / series.iloc[-6]) * 100
+            
+            # 6개월 변동성 계산
+            daily_pct_change = series.pct_change().dropna()
+            volatility = daily_pct_change.std() * np.sqrt(252) * 100 if not daily_pct_change.empty else 0
+            
+            # 3개월 모멘텀
+            if len(series) > 63:
+                momentum = ((series.iloc[-1] - series.iloc[-63]) / series.iloc[-63])
+            else:
+                momentum = ((series.iloc[-1] - series.iloc[0]) / series.iloc[0])
+                
+            results.append({
+                "Ticker": ticker_symbol,
+                "Sector": sectors[ticker_symbol],
+                "Price": series.iloc[-1],
+                "Return (%)": round(recent_return, 2),
+                "Volatility (%)": round(volatility, 2),
+                "Market Cap ($B)": round(mcap, 1),
+                "Raw Momentum": momentum
+            })
+        except Exception as e:
+            print(f"[WARNING] Error processing sector ETF {ticker_symbol}: {e}")
+            
+    df = pd.DataFrame(results)
+    
+    if not df.empty:
+        # Momentum Score 정규화
+        min_mom = df["Raw Momentum"].min()
+        max_mom = df["Raw Momentum"].max()
+        if max_mom != min_mom:
+            df["Momentum Score"] = ((df["Raw Momentum"] - min_mom) / (max_mom - min_mom)).round(2)
+        else:
+            df["Momentum Score"] = 0.5
+            
+        df = df.drop(columns=["Raw Momentum"])
+        
+    return df
 
 
 def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
