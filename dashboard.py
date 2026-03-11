@@ -407,17 +407,63 @@ for col, key in zip(cols, metric_keys):
 
 if menu == "Overview":
     # -------------------------------------------------------------------
-    # 1) AI Market Advisor (Gemini 기반 종합 판단)
+    # 1) 선택된 자산 차트 (메트릭 카드 버튼 클릭 시 AI Advisor 위에 표시)
+    # -------------------------------------------------------------------
+    target_ticker = st.session_state.get('selected_ticker', '^VIX')
+    ticker_name = macro_data.get(target_ticker, {}).get("name", target_ticker)
+    
+    # 기간 선택 라디오 버튼
+    timeframe_map = {
+        "3개월": "3mo",
+        "6개월": "6mo",
+        "12개월": "1y",
+        "3년": "3y"
+    }
+    
+    selected_period_label = st.radio("조회 기간 선택:", options=list(timeframe_map.keys()), index=2)
+    selected_period = timeframe_map[selected_period_label]
+    
+    st.markdown(f"#### 📊 {ticker_name} - Price History ({selected_period_label})")
+    
+    hist_df = load_ticker_history_data(target_ticker, period=selected_period)
+        
+    if not hist_df.empty:
+        start_price = hist_df["Close"].iloc[0]
+        end_price = hist_df["Close"].iloc[-1]
+        perf = ((end_price - start_price) / start_price) * 100
+        
+        perf_color = "#00d4aa" if perf >= 0 else "#ff4444"
+        perf_text = f"{perf:+.2f}%"
+        
+        st.markdown(f"<h3 style='margin-top: -15px;'>해당 기간 수익률: <span style='color: {perf_color}; font-weight: bold;'>{perf_text}</span></h3>", unsafe_allow_html=True)
+
+        fig_hist = px.line(hist_df, x=hist_df.index, y="Close", 
+                           template="plotly_dark",
+                           color_discrete_sequence=["#00d4aa"])
+        fig_hist.update_layout(
+            xaxis_title="Date",
+            yaxis_title="Price (USD)",
+            hovermode="x unified",
+            margin=dict(l=40, r=40, t=20, b=40),
+            height=400
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
+    else:
+        st.error("차트 데이터를 불러올 수 없습니다.")
+
+    st.markdown("---")
+
+    # -------------------------------------------------------------------
+    # 2) AI Market Advisor (Gemini 기반 종합 판단)
     # -------------------------------------------------------------------
     st.markdown("### 🤖 AI Market Advisor (종합 투자 전략)")
     
     ai_advice = load_gemini_25_market_report(macro_data, intelligence_data, liquidity_data, gemini_api_key)
     
-    # AI 어드바이스 박스 (스타일 적용)
     st.markdown(
         f"""
         <div style="background-color: #1e2538; padding: 20px; border-radius: 10px; border-left: 5px solid #00d4aa; margin-bottom: 25px; line-height: 1.6;">
-            {ai_advice.replace('\n', '<br>')}
+            {ai_advice.replace(chr(10), '<br>')}
         </div>
         """,
         unsafe_allow_html=True
@@ -426,7 +472,7 @@ if menu == "Overview":
     st.markdown("---")
     
     # -------------------------------------------------------------------
-    # 2-1) 유동성 지표 (Liquidity Metrics)
+    # 3) 유동성 지표 (Liquidity Metrics)
     # -------------------------------------------------------------------
     st.markdown("### 💧 US Liquidity & Macro Summary")
     l_col1, l_col2, l_col3 = st.columns(3)
@@ -448,56 +494,6 @@ if menu == "Overview":
         vix_price = vix_data.get("price", "N/A")
         st.metric("VIX Index (Fear Gauge)", f"{vix_price}", delta=f"{vix_data.get('change_pct', 0):+.2f}%")
 
-    # -------------------------------------------------------------------
-    # 2) 선택된 자산 차트 (인터랙션)
-    # -------------------------------------------------------------------
-    # 기본값 설정: 선택된 것이 없으면 VIX (^VIX) 디폴트
-    target_ticker = st.session_state.get('selected_ticker', '^VIX')
-    ticker_name = macro_data.get(target_ticker, {}).get("name", target_ticker)
-    
-    # 기간 선택 라디오 버튼
-    timeframe_map = {
-        "3개월": "3mo",
-        "6개월": "6mo",
-        "12개월": "1y",
-        "3년": "3y"
-    }
-    
-    # 라디오 버튼을 가로로 배치 (0.84버전에서는 horizontal=True 지원)
-    selected_period_label = st.radio("조회 기간 선택:", options=list(timeframe_map.keys()), index=2)
-    selected_period = timeframe_map[selected_period_label]
-    
-    st.markdown(f"#### 📊 {ticker_name} - Price History ({selected_period_label})")
-    
-    with st.spinner(f"Loading {ticker_name} chart..."):
-        hist_df = load_ticker_history_data(target_ticker, period=selected_period)
-        
-    if not hist_df.empty:
-        # 수익률 계산: (마지막 종가 - 첫 종가) / 첫 종가 * 100
-        start_price = hist_df["Close"].iloc[0]
-        end_price = hist_df["Close"].iloc[-1]
-        perf = ((end_price - start_price) / start_price) * 100
-        
-        # 수익률 텍스트 스타일
-        perf_color = "#00d4aa" if perf >= 0 else "#ff4444"
-        perf_text = f"{perf:+.2f}%"
-        
-        # 제목 옆에 수익률 표시
-        st.markdown(f"<h3 style='margin-top: -15px;'>해당 기간 수익률: <span style='color: {perf_color}; font-weight: bold;'>{perf_text}</span></h3>", unsafe_allow_html=True)
-
-        fig_hist = px.line(hist_df, x=hist_df.index, y="Close", 
-                           template="plotly_dark",
-                           color_discrete_sequence=["#00d4aa"])
-        fig_hist.update_layout(
-            xaxis_title="Date",
-            yaxis_title="Price (USD)",
-            hovermode="x unified",
-            margin=dict(l=40, r=40, t=20, b=40),
-            height=400
-        )
-        st.plotly_chart(fig_hist, use_container_width=True)
-    else:
-        st.error("차트 데이터를 불러올 수 없습니다.")
 
     # -------------------------------------------------------------------
     # 3) 유동성 트렌드 차트 (TGA & Fed Assets)

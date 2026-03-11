@@ -128,49 +128,58 @@ def get_us_market_status() -> Dict[str, str]:
 
 
 def get_tga_data() -> Dict[str, Any]:
-    """미 재무부 일반 계정(TGA) 잔고 데이터를 가져옵니다."""
+    """미 재무부 일반 계정(TGA) 잔고 데이터를 FRED WTREGEN 시리즈에서 가져옵니다."""
     try:
-        # TGA Balance: Operating Cash Balance (Treasury General Account)
-        # Endpoint: https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/operating_cash_balance
-        url = "https://api.fiscaldata.treasury.gov/services/api/fiscal_service/v1/accounting/dts/operating_cash_balance?sort=-record_date&page[size]=100"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=10)
-        data = resp.json()
-        
-        # 'Treasury General Account (TGA) Closing Balance' 항목만 필터링
-        tga_rows = [d for d in data.get("data", []) if "Treasury General Account (TGA) Closing Balance" in d.get("account_type", "")]
-        
-        if tga_rows:
-            latest = tga_rows[0]
-            # 최근 30개 데이터로 리스트 생성 (차트용)
-            history = [{"date": d["record_date"], "value": float(d["close_today_bal"]) / 1000} for d in tga_rows[:30]] # $B 단위
-            history.reverse()
+        url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WTREGEN"
+        df = pd.read_csv(url)
+        if not df.empty:
+            date_col = 'observation_date' if 'observation_date' in df.columns else 'DATE'
+            value_col = 'WTREGEN'
+            
+            df[date_col] = pd.to_datetime(df[date_col])
+            # 결측치 forward fill (주간 데이터 → 일간 정렬용)
+            df[value_col] = pd.to_numeric(df[value_col], errors='coerce')
+            df = df.dropna(subset=[value_col])
+            df = df.set_index(date_col).asfreq('D').ffill().reset_index()
+            
+            latest_val = float(df[value_col].iloc[-1]) / 1000  # Millions → Billions
+            latest_date = df[date_col].iloc[-1].strftime('%Y-%m-%d')
+            
+            # 최근 90일 데이터 (차트용)
+            recent = df.tail(90)
+            history = [{"date": row[date_col].strftime('%Y-%m-%d'), "value": float(row[value_col]) / 1000} for _, row in recent.iterrows()]
+            
             return {
-                "latest_value": float(latest["close_today_bal"]) / 1000, # $B
-                "date": latest["record_date"],
+                "latest_value": round(latest_val, 1),
+                "date": latest_date,
                 "history": history
             }
     except Exception as e:
-        print(f"Error fetching TGA data: {e}")
+        print(f"Error fetching TGA (WTREGEN) data: {e}")
     return {"latest_value": 0, "date": "N/A", "history": []}
 
 
 def get_fred_liquidity_data() -> Dict[str, Any]:
-    """연준 총 자산(WALCL) 데이터를 가져옵니다 (FRED CSV 활용)."""
+    """연준 총 자산(WALCL) 데이터를 FRED CSV에서 가져옵니다."""
     try:
-        # WALCL: Assets: Total Assets: Less Eliminations from Consolidation: Wednesday Level
         url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WALCL"
         df = pd.read_csv(url)
         if not df.empty:
-            # FRED CSV의 컬럼명은 'observation_date'와 'WALCL'입니다.
             date_col = 'observation_date' if 'observation_date' in df.columns else 'DATE'
+            value_col = 'WALCL'
+            
             df[date_col] = pd.to_datetime(df[date_col])
-            latest_val = float(df['WALCL'].iloc[-1]) / 1000000 # $T 단위 시각화
+            # 결측치 forward fill (주간 데이터 → 일간 정렬용)
+            df[value_col] = pd.to_numeric(df[value_col], errors='coerce')
+            df = df.dropna(subset=[value_col])
+            df = df.set_index(date_col).asfreq('D').ffill().reset_index()
+            
+            latest_val = float(df[value_col].iloc[-1]) / 1000000  # Millions → Trillions
             latest_date = df[date_col].iloc[-1].strftime('%Y-%m-%d')
             
-            # 최근 30개 데이터 (주간 데이터)
-            recent = df.tail(30)
-            history = [{"date": row[date_col].strftime('%Y-%m-%d'), "value": float(row['WALCL']) / 1000000} for _, row in recent.iterrows()]
+            # 최근 90일 데이터 (차트용)
+            recent = df.tail(90)
+            history = [{"date": row[date_col].strftime('%Y-%m-%d'), "value": float(row[value_col]) / 1000000} for _, row in recent.iterrows()]
             
             return {
                 "latest_value": round(latest_val, 2),
@@ -178,8 +187,9 @@ def get_fred_liquidity_data() -> Dict[str, Any]:
                 "history": history
             }
     except Exception as e:
-        print(f"Error fetching Fed Assets: {e}")
+        print(f"Error fetching Fed Assets (WALCL): {e}")
     return {"latest_value": 0, "date": "N/A", "history": []}
+
 
 
 def get_ai_market_advice(macro_data, news_data, liquidity_data, gemini_api_key):
