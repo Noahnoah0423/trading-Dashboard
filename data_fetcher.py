@@ -8,6 +8,7 @@
 
 import yfinance as yf
 import pandas as pd
+import numpy as np
 from typing import Dict, List, Any
 import requests
 import json
