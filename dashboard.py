@@ -639,28 +639,28 @@ if menu == "Overview":
         best_sector = attr_df.loc[attr_df["Attractiveness Score"].idxmax()]
         worst_sector = attr_df.loc[attr_df["Attractiveness Score"].idxmin()]
     
-    st.markdown(
-        f"""
-        <div style='background-color: #1a1f2e; padding: 15px; border-radius: 8px; border-left: 4px solid #00d4aa; margin-bottom: 20px;'>
-            <p style='margin: 0; font-size: 1.05rem;'>
-                📈 <strong>가장 매력적인 섹터: <span style='color: #00d4aa;'>{best_sector['Sector']}</span></strong><br>
-                <span style='color: #8892a4; font-size: 0.95rem;'>
-                높은 수익률(<b>{best_sector['Return (%)']}%</b>)과 강한 모멘텀(<b>{best_sector['Momentum Score']}</b>)을 유지하면서도 
-                상대적으로 안정적인 변동성(<b>{best_sector['Volatility (%)']}%</b>)을 보이고 있어 투자 매력도가 가장 높습니다.
-                </span>
-            </p>
-            <hr style='margin: 10px 0; border: none; border-top: 1px solid #2d3548;'>
-            <p style='margin: 0; font-size: 1.05rem;'>
-                📉 <strong>주의가 필요한 섹터: <span style='color: #ff4444;'>{worst_sector['Sector']}</span></strong><br>
-                <span style='color: #8892a4; font-size: 0.95rem;'>
-                저조한 수익률(<b>{worst_sector['Return (%)']}%</b>)과 높은 변동성(<b>{worst_sector['Volatility (%)']}%</b>)으로 인해 
-                리스크 대비 보상이 낮아 현재 투자 매력도가 가장 떨어지는 것으로 분석됩니다.
-                </span>
-            </p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        st.markdown(
+            f"""
+            <div style='background-color: #1a1f2e; padding: 15px; border-radius: 8px; border-left: 4px solid #00d4aa; margin-bottom: 20px;'>
+                <p style='margin: 0; font-size: 1.05rem;'>
+                    📈 <strong>가장 매력적인 섹터: <span style='color: #00d4aa;'>{best_sector['Sector']}</span></strong><br>
+                    <span style='color: #8892a4; font-size: 0.95rem;'>
+                    높은 수익률(<b>{best_sector['Return (%)']}%</b>)과 강한 모멘텀(<b>{best_sector['Momentum Score']}</b>)을 유지하면서도 
+                    상대적으로 안정적인 변동성(<b>{best_sector['Volatility (%)']}%</b>)을 보이고 있어 투자 매력도가 가장 높습니다.
+                    </span>
+                </p>
+                <hr style='margin: 10px 0; border: none; border-top: 1px solid #2d3548;'>
+                <p style='margin: 0; font-size: 1.05rem;'>
+                    📉 <strong>주의가 필요한 섹터: <span style='color: #ff4444;'>{worst_sector['Sector']}</span></strong><br>
+                    <span style='color: #8892a4; font-size: 0.95rem;'>
+                    저조한 수익률(<b>{worst_sector['Return (%)']}%</b>)과 높은 변동성(<b>{worst_sector['Volatility (%)']}%</b>)으로 인해 
+                    리스크 대비 보상이 낮아 현재 투자 매력도가 가장 떨어지는 것으로 분석됩니다.
+                    </span>
+                </p>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
     # -------------------------------------------------------------------
     # 하단: 시장 데이터 요약 테이블 (Major Sector ETFs)
