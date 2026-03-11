@@ -531,7 +531,7 @@ def get_insider_trading_data(ticker_symbol: str) -> pd.DataFrame:
 # 6) GDELT & Gemini Intelligence Feed 관련
 # ---------------------------------------------------------------------------
 
-def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=20):
+def get_gdelt_news(keywords=["Economy", "Interest Rate", "Earnings", "NVIDIA", "Apple", "Microsoft", "Semiconductor"], max_results=30):
     """
     뉴스 데이터 수집 (다중 소스 Fallback 체인):
     1차: Google News RSS (무료, API 키 불필요, 안정적)
@@ -687,21 +687,26 @@ def analyze_news_with_gemini(news_list, api_key):
             news_text += f"[{idx}] Title: {news.get('title', 'No Title')}\n"
         
     prompt = f"""
-    You are a hedge fund lead analyst and superforecasting expert. 
-    Review the following news headlines. For each headline, evaluate the probability (0-100) that this news will cause a significant, tradable movement in broad asset prices (equities, bonds, commodities) within the next 1 week.
-    Apply Philip Tetlock's Superforecasting principles: weight evidence precisely, remove political bias, ignore pure noise.
+    You are a professional financial market analyst. 
+    Review the following news headlines and perform a cold, objective analysis.
     
-    Filter out any news that scores below 70. 
+    For each headline, provide:
+    1. **Sentiment**: Categorize it as POSITIVE, NEGATIVE, or NEUTRAL based on its likely impact on the specific company or the broader market.
+    2. **Category**: Identify if it is 'Macro' (economy, rates), 'Micro' (individual company, earnings), or 'Sector' (industry-wide).
+    3. **Impact Score**: Evaluate (0-100) how important this news is for an investor to know today.
+    4. **Korean Translation**: A precise, professional Korean translation of the headline.
     
-    IMPORTANT: For any headline that scores 90 or above (CRITICAL), you MUST also provide a Korean translation of the headline in the "title_kr" field. For items below 90, set "title_kr" to null.
+    Filter out pure noise or irrelevant news.
     
-    Output strictly valid JSON with no markdown formatting or extra text. The JSON format must be a list of objects like this:
+    Output strictly valid JSON with no markdown formatting. The JSON format must be:
     [
       {{
-        "index": <integer corresponding to the news item index>,
-        "score": <integer 70-100>,
-        "investment_angle": "<one sentence concise investment angle/insight>",
-        "title_kr": "<Korean translation of headline if score >= 90, else null>"
+        "index": <integer index>,
+        "score": <integer 0-100>,
+        "sentiment": "POSITIVE" | "NEGATIVE" | "NEUTRAL",
+        "category": "Macro" | "Micro" | "Sector",
+        "investment_angle": "<one sentence concise investment insight in English>",
+        "title_kr": "<professional Korean translation of the headline>"
       }}
     ]
     
@@ -733,8 +738,10 @@ def analyze_news_with_gemini(news_list, api_key):
                     "domain": original["domain"],
                     "date": original.get("date", original.get("seendate", "Unknown")),
                     "score": res.get("score", 0),
+                    "sentiment": res.get("sentiment", "NEUTRAL"),
+                    "category": res.get("category", "General"),
                     "investment_angle": res.get("investment_angle", "No insight provided."),
-                    "title_kr": res.get("title_kr", None)
+                    "title_kr": res.get("title_kr", original["title"])
                 })
         
         # Score 기준 내림차순 정렬

@@ -734,8 +734,7 @@ elif menu == "Intelligence Feed":
     # -------------------------------------------------------------------
     st.markdown("### 🧠 Intelligence Feed (GDELT + Gemini 2.5 Flash)")
     st.markdown(
-        "<p style='color: #6b7688;'>GDELT 실시간 뉴스에 «슈퍼포어캐스팅» 원칙을 적용하여 "
-        "단기 시장 변동성을 촉발할 가능성이 높은 뉴스를 선별합니다.</p>",
+        "<p style='color: #6b7688;'>거시 경제 주요 이슈와 우량 기업의 실적 관련 실시간 뉴스를 AI가 분석하여 제공합니다.</p>",
         unsafe_allow_html=True,
     )
     
@@ -759,15 +758,19 @@ elif menu == "Intelligence Feed":
         else:
             for item in feed_data:
                 score = item.get("score", 0)
+                sentiment = item.get("sentiment", "NEUTRAL")
+                category = item.get("category", "Macro")
                 
-                # 점수 90 이상은 CRITICAL 표시
-                is_critical = score >= 90
-                
-                border_color = "#ff4444" if is_critical else "#2d3548"
-                bg_color = "#3d0a0a" if is_critical else "#1a1f2e"
+                # 감성(Sentiment)에 따른 색상 정의
+                sentiment_colors = {
+                    "POSITIVE": {"border": "#00d4aa", "bg": "#0a1f1a", "icon": "📈"},
+                    "NEGATIVE": {"border": "#ff4444", "bg": "#1f0a0a", "icon": "📉"},
+                    "NEUTRAL": {"border": "#4e88ff", "bg": "#0a0f1f", "icon": "📰"}
+                }
+                style = sentiment_colors.get(sentiment, sentiment_colors["NEUTRAL"])
                 
                 title_kr = item.get("title_kr")
-                kr_line = f"<p style='margin-top: 6px; margin-bottom: 0; color: #ffcc00; font-size: 1.0rem; font-weight: 600;'>🇰🇷 {title_kr}</p>" if is_critical and title_kr else ""
+                kr_line = f"<p style='margin-top: 6px; margin-bottom: 0; color: #ffcc00; font-size: 1.05rem; font-weight: 600;'>🇰🇷 {title_kr}</p>" if title_kr else ""
                 
                 article_date = item.get("date", "")
                 if not article_date or article_date == "Unknown":
@@ -775,14 +778,17 @@ elif menu == "Intelligence Feed":
                 else:
                     date_display = article_date[:16] if len(article_date) > 16 else article_date
                 
-                html_card = f"""<div style='background-color: {bg_color}; padding: 15px; border-radius: 8px; border: 1px solid {border_color}; margin-bottom: 20px;'>
-<div style='display: flex; justify-content: space-between; align-items: center;'>
-<h4 style='margin: 0; color: #ffffff;'>{'🚨 <b>[CRITICAL]</b>' if is_critical else '📰'} <a href='{item.get("url", "#")}' style='color: #ffffff; text-decoration: none;' target='_blank'>{item.get("title", "No Title")}</a></h4>
-<span style='background-color: {border_color}; color: #ffffff; padding: 3px 8px; border-radius: 4px; font-weight: bold;'>Score: {score}</span>
+                html_card = f"""<div style='background-color: {style["bg"]}; padding: 18px; border-radius: 10px; border: 1px solid {style["border"]}; border-left: 5px solid {style["border"]}; margin-bottom: 22px;'>
+<div style='display: flex; justify-content: space-between; align-items: flex-start; gap: 10px;'>
+    <h4 style='margin: 0; color: #ffffff; line-height: 1.4;'>{style["icon"]} <a href='{item.get("url", "#")}' style='color: #ffffff; text-decoration: none;' target='_blank'>{item.get("title", "No Title")}</a></h4>
+    <div style='display: flex; flex-direction: column; align-items: flex-end; gap: 5px;'>
+        <span style='background-color: {style["border"]}; color: #ffffff; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.8rem;'>{sentiment}</span>
+        <span style='background-color: #2d3548; color: #8892a4; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;'>{category}</span>
+    </div>
 </div>
 {kr_line}
-<p style='margin-top: 5px; color: #8892a4; font-size: 0.85rem;'>Source: {item.get("domain", "Unknown")} | Date: {date_display}</p>
-<p style='margin-top: 10px; margin-bottom: 0px; font-size: 1.05rem;'><strong style='color: #00d4aa;'>💡 Investment Angle:</strong> {item.get("investment_angle", "N/A")}</p>
+<p style='margin-top: 8px; color: #8892a4; font-size: 0.85rem;'>Source: {item.get("domain", "Unknown")} | {date_display} | Impact: <b>{score}</b></p>
+<p style='margin-top: 12px; margin-bottom: 0px; font-size: 1.0rem; line-height: 1.5;'><strong style='color: #00d4aa;'>💡 AI Insight:</strong> {item.get("investment_angle", "N/A")}</p>
 </div>"""
                 st.markdown(html_card, unsafe_allow_html=True)
 
