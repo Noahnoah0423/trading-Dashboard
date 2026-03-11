@@ -425,102 +425,138 @@ def get_insider_trading_data(ticker_symbol: str) -> pd.DataFrame:
 
 def get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis"], max_results=20):
     """
-    Query the GDELT 2.0 DOC API for recent news containing specific keywords.
+    뉴스 데이터 수집 (다중 소스 Fallback 체인):
+    1차: Google News RSS (무료, API 키 불필요, 안정적)
+    2차: Yahoo Finance RSS
+    3차: GDELT DOC API (429 Rate Limit 빈번)
     """
-    endpoint = "https://api.gdeltproject.org/api/v2/doc/doc"
-    query_str = " OR ".join(f'"{kw}"' for kw in keywords)
-    query_str += ' sourcelang:eng'
-    
-    params = {
-        "query": query_str,
-        "mode": "artlist",
-        "maxrecords": max_results,
-        "format": "json",
-    }
+    import xml.etree.ElementTree as ET
     
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-        "Accept": "application/json"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/xml, text/xml, application/json"
     }
     
+    # --- 1차 소스: Google News RSS (가장 안정적) ---
+    def fetch_google_news_rss():
+        """Google News RSS에서 금융/경제 뉴스를 수집합니다."""
+        query = "+".join(keywords[:3])  # 상위 3개 키워드 조합
+        gn_url = f"https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
+        try:
+            resp = requests.get(gn_url, headers=headers, timeout=10)
+            if resp.status_code == 200:
+                root = ET.fromstring(resp.content)
+                items = list(root.findall('./channel/item'))
+                results = []
+                seen_titles = set()
+                for item in items[:max_results]:
+                    title = item.find('title').text if item.find('title') is not None else "No Title"
+                    # 중복 제목 제거
+                    if title in seen_titles:
+                        continue
+                    seen_titles.add(title)
+                    
+                    link = item.find('link').text if item.find('link') is not None else "#"
+                    pubDate = item.find('pubDate').text if item.find('pubDate') is not None else ""
+                    source = item.find('source')
+                    domain = source.text if source is not None else "Google News"
+                    
+                    results.append({
+                        "title": title,
+                        "url": link,
+                        "domain": domain,
+                        "seendate": pubDate
+                    })
+                if results:
+                    print(f"[INFO] Google News RSS: {len(results)}건 수집 성공")
+                    return results
+        except Exception as e:
+            print(f"[WARNING] Google News RSS 실패: {e}")
+        return None
+    
+    # --- 2차 Fallback: Yahoo Finance RSS ---
     def fetch_yahoo_rss_fallback():
-        """GDELT Rate Limit (429) 시 Yahoo Finance RSS를 대안으로 사용"""
-        print("[INFO] GDELT API 차단 감지. Yahoo Finance RSS Fallback 작동...")
-        import xml.etree.ElementTree as ET
+        """Yahoo Finance RSS에서 뉴스를 수집합니다."""
+        print("[INFO] Yahoo Finance RSS Fallback 작동...")
         rss_url = "https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,TLT,GLD,USO&region=US&lang=en-US"
         try:
             rss_resp = requests.get(rss_url, headers=headers, timeout=10)
             if rss_resp.status_code == 200:
                 root = ET.fromstring(rss_resp.content)
-                fallback_results = []
+                results = []
                 items = list(root.findall('./channel/item'))
                 for item in items[:max_results]:
                     title = item.find('title').text if item.find('title') is not None else "No Title"
                     link = item.find('link').text if item.find('link') is not None else "#"
-                    pubDate = item.find('pubDate').text if item.find('pubDate') is not None else "Unknown Date"
-                    fallback_results.append({
+                    pubDate = item.find('pubDate').text if item.find('pubDate') is not None else ""
+                    results.append({
                         "title": title,
                         "url": link,
                         "domain": "finance.yahoo.com",
-                        "date": pubDate
+                        "seendate": pubDate
                     })
-                return fallback_results
+                if results:
+                    print(f"[INFO] Yahoo RSS: {len(results)}건 수집 성공")
+                    return results
         except Exception as e:
             print(f"[WARNING] Yahoo RSS Fallback 실패: {e}")
         return None
     
-    try:
-        # Streamlit Cloud 환경에서의 네트워크 지연 및 방화벽 차단을 방지하기 위해 Session과 헤더 사용
-        session = requests.Session()
-        response = session.get(endpoint, params=params, headers=headers, timeout=15)
-        response.raise_for_status()
-        
-        # 일부 GDELT API 응답이 text/html로 올 수 있는 경우 대비
+    # --- 3차 Fallback: GDELT DOC API ---
+    def fetch_gdelt_api():
+        """GDELT DOC API에서 뉴스를 수집합니다 (429 빈번)."""
+        endpoint = "https://api.gdeltproject.org/api/v2/doc/doc"
+        query_str = " OR ".join(f'"{kw}"' for kw in keywords)
+        query_str += ' sourcelang:eng'
+        params = {
+            "query": query_str,
+            "mode": "artlist",
+            "maxrecords": max_results,
+            "format": "json",
+        }
         try:
+            session = requests.Session()
+            response = session.get(endpoint, params=params, headers=headers, timeout=15)
+            response.raise_for_status()
             data = response.json()
-        except json.JSONDecodeError:
-            print("[WARNING] GDELT returned 200 but failed to parse JSON (likely a block/captcha page). Falling back...")
-            fallback = fetch_yahoo_rss_fallback()
-            if fallback:
-                return fallback
-            return f"GDELT API Format Error: 서버가 JSON 형식이 아닌 데이터를 반환했습니다. (응답 코드: {response.status_code})"
-            
-        articles = data.get("articles", [])
-        
-        results = []
-        seen_urls = set()
-        
-        for art in articles:
-            url = art.get("url")
-            if not url or url in seen_urls:
-                continue
-                
-            seen_urls.add(url)
-            
-            results.append({
-                "title": art.get("title", "No Title"),
-                "url": url,
-                "domain": art.get("domain", "Unknown"),
-                "seendate": art.get("seendate", "")
-            })
-            
-        return results
-
-    except requests.exceptions.HTTPError as e:
-        if response.status_code == 429:
-            fallback = fetch_yahoo_rss_fallback()
-            if fallback:
-                return fallback
-        return f"GDELT API HTTP Error: {response.status_code}"
-    except requests.exceptions.Timeout:
-        fallback = fetch_yahoo_rss_fallback()
-        if fallback:
-            return fallback
-        return "GDELT API Timeout Error: 서버 응답 지연"
-    except Exception as e:
-        error_msg = str(e)
-        print(f"Error fetching GDELT data: {error_msg}")
-        return f"GDELT Fetch Error: {error_msg}"
+            articles = data.get("articles", [])
+            results = []
+            seen_urls = set()
+            for art in articles:
+                url = art.get("url")
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                results.append({
+                    "title": art.get("title", "No Title"),
+                    "url": url,
+                    "domain": art.get("domain", "Unknown"),
+                    "seendate": art.get("seendate", "")
+                })
+            if results:
+                print(f"[INFO] GDELT API: {len(results)}건 수집 성공")
+                return results
+        except Exception as e:
+            print(f"[WARNING] GDELT API 실패: {e}")
+        return None
+    
+    # --- Fallback Chain 실행 ---
+    # 1차: Google News RSS
+    result = fetch_google_news_rss()
+    if result:
+        return result
+    
+    # 2차: Yahoo Finance RSS
+    result = fetch_yahoo_rss_fallback()
+    if result:
+        return result
+    
+    # 3차: GDELT API
+    result = fetch_gdelt_api()
+    if result:
+        return result
+    
+    return "모든 뉴스 소스에서 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요."
 
 def analyze_news_with_gemini(news_list, api_key):
     """

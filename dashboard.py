@@ -14,6 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+import json
 from datetime import datetime
 
 # 로컬 모듈 임포트
@@ -26,6 +27,8 @@ from data_fetcher import (
     get_gdelt_news,
     analyze_news_with_gemini
 )
+from social_fetcher import get_combined_social_feed, analyze_social_with_gemini
+
 from risk_analyzer import calculate_market_risk
 
 
@@ -212,7 +215,7 @@ def load_gemini_25_market_report(macro_data, news_data, liquidity_data, gemini_a
 
 @st.cache_data(ttl=43200, show_spinner=True)
 def load_intelligence_feed(api_key, bypass_cache=False):
-    """GDELT 뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (12시간 갱신)"""
+    """뉴스 수집 및 Gemini 필터링된 인텔리전스 피드 로드 (12시간 갱신)"""
     raw_news = get_gdelt_news(keywords=["Economy", "Interest Rate", "Crisis", "War"], max_results=30)
     
     # 에러 문자열이 반환된 경우 UI로 그대로 전달
@@ -225,6 +228,23 @@ def load_intelligence_feed(api_key, bypass_cache=False):
     analyzed_news = analyze_news_with_gemini(raw_news, api_key)
     return analyzed_news
 
+
+@st.cache_data(ttl=900, show_spinner=False)
+def load_social_feed(_reddit_creds, _telegram_creds, _truthsocial_creds):
+    """SNS 커뮤니티 피드 캐싱 (15분 갱신)"""
+    return get_combined_social_feed(
+        reddit_creds=_reddit_creds,
+        telegram_creds=_telegram_creds,
+        truthsocial_creds=_truthsocial_creds,
+    )
+
+
+@st.cache_data(ttl=43200, show_spinner=False)
+def load_social_ai_analysis(posts_json, api_key):
+    """소셜 피드 AI 분석 캐싱 (12시간 갱신)"""
+    posts = json.loads(posts_json) if isinstance(posts_json, str) else posts_json
+    return analyze_social_with_gemini(posts, api_key)
+
 # ===========================================================================
 # 사이드바 (Sidebar) 메뉴 구성
 # ===========================================================================
@@ -233,7 +253,7 @@ st.sidebar.markdown("---")
 
 menu = st.sidebar.radio(
     "📋 Navigation",
-    options=["Overview", "Intelligence Feed", "M3 Short Squeeze", "M6 Correlation", "M8 Inst. Flow", "Insider Trading"],
+    options=["Overview", "Intelligence Feed", "Community Hot Topics", "M3 Short Squeeze", "M6 Correlation", "M8 Inst. Flow", "Insider Trading"],
     index=0,
 )
 
@@ -261,6 +281,39 @@ show_debug = st.sidebar.checkbox("Debug Mode", value=False)
 st.sidebar.markdown("---")
 st.sidebar.text(f"🕐 Last Update: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 st.sidebar.text("Powered by yfinance & Streamlit")
+
+# --- SNS API 크레덴셜 수집 (Streamlit Secrets 기반) ---
+reddit_creds = None
+telegram_creds = None
+truthsocial_creds = None
+
+try:
+    if "REDDIT_CLIENT_ID" in st.secrets and st.secrets["REDDIT_CLIENT_ID"]:
+        reddit_creds = {
+            "client_id": st.secrets["REDDIT_CLIENT_ID"],
+            "client_secret": st.secrets.get("REDDIT_CLIENT_SECRET", ""),
+            "user_agent": st.secrets.get("REDDIT_USER_AGENT", "TradingDashboard/1.0"),
+        }
+except Exception:
+    pass
+
+try:
+    if "TELEGRAM_API_ID" in st.secrets and st.secrets["TELEGRAM_API_ID"]:
+        telegram_creds = {
+            "api_id": st.secrets["TELEGRAM_API_ID"],
+            "api_hash": st.secrets.get("TELEGRAM_API_HASH", ""),
+        }
+except Exception:
+    pass
+
+try:
+    if "TRUTHSOCIAL_USERNAME" in st.secrets and st.secrets["TRUTHSOCIAL_USERNAME"]:
+        truthsocial_creds = {
+            "username": st.secrets["TRUTHSOCIAL_USERNAME"],
+            "password": st.secrets.get("TRUTHSOCIAL_PASSWORD", ""),
+        }
+except Exception:
+    pass
 
 
 # ===========================================================================
@@ -659,6 +712,109 @@ elif menu == "Intelligence Feed":
 <p style='margin-top: 10px; margin-bottom: 0px; font-size: 1.05rem;'><strong style='color: #00d4aa;'>💡 Investment Angle:</strong> {item.get("investment_angle", "N/A")}</p>
 </div>"""
                 st.markdown(html_card, unsafe_allow_html=True)
+
+
+elif menu == "Community Hot Topics":
+    # -------------------------------------------------------------------
+    # Community Hot Topics 탭 (Reddit + Telegram + Truth Social)
+    # -------------------------------------------------------------------
+    st.markdown("### 📱 Community Hot Topics")
+    st.markdown(
+        "<p style='color: #6b7688;'>Reddit, Telegram, Truth Social 등 투자 커뮤니티의 "
+        "인기 게시물을 수집하고, AI가 투자 영향을 평가합니다.</p>",
+        unsafe_allow_html=True,
+    )
+    
+    # 연결된 플랫폼 표시
+    connected = []
+    if reddit_creds:
+        connected.append("🟠 Reddit")
+    if telegram_creds:
+        connected.append("✈️ Telegram")
+    if truthsocial_creds:
+        connected.append("🟦 Truth Social")
+    
+    if connected:
+        st.markdown(f"**연결된 플랫폼:** {' · '.join(connected)}")
+    else:
+        st.warning(
+            "⚠️ SNS API 키가 아직 설정되지 않았습니다. "
+            "Streamlit Secrets에 `REDDIT_CLIENT_ID`, `TELEGRAM_API_ID`, "
+            "또는 `TRUTHSOCIAL_USERNAME`을 추가해 주세요."
+        )
+        st.info(
+            "📝 **Reddit API 키 발급 방법:**\n"
+            "1. https://www.reddit.com/prefs/apps 접속\n"
+            "2. 'create another app...' 클릭\n"
+            "3. type: `script`, redirect uri: `http://localhost:8080`\n"
+            "4. 생성된 `client_id`와 `secret`을 Streamlit Secrets에 추가"
+        )
+    
+    # 데이터 로드 (크레덴셜이 있는 경우에만)
+    if any([reddit_creds, telegram_creds, truthsocial_creds]):
+        col_refresh, col_status = st.columns([1, 4])
+        with col_refresh:
+            if st.button("🔄 Refresh Community Feed"):
+                load_social_feed.clear()
+                load_social_ai_analysis.clear()
+        
+        with st.spinner("SNS 커뮤니티 데이터를 수집 중..."):
+            social_data = load_social_feed(reddit_creds, telegram_creds, truthsocial_creds)
+        
+        if not social_data:
+            st.info("수집된 커뮤니티 데이터가 없습니다. API 키를 확인해 주세요.")
+        else:
+            # Last Updated 표시
+            last_updated = social_data[0].get("collected_at", "") if social_data else ""
+            if last_updated:
+                st.markdown(
+                    f"<p style='color: #6b7688; font-size: 0.85rem; text-align: right;'>"
+                    f"🕔 Last Updated: <b>{last_updated}</b> (15분 캐싱)</p>",
+                    unsafe_allow_html=True
+                )
+            
+            # AI 분석 (상위 5개, 키가 있을 때만)
+            if gemini_api_key and len(social_data) > 0:
+                posts_json = json.dumps(social_data[:5], ensure_ascii=False, default=str)
+                social_data = load_social_ai_analysis(posts_json, gemini_api_key)
+            
+            # 게시물 카드 렌더링
+            for item in social_data:
+                platform_icon = item.get("platform_icon", "📱")
+                platform = item.get("platform", "unknown")
+                title = item.get("title", "No Title")
+                url = item.get("url", "#")
+                score_label = item.get("score_label", "")
+                normalized = item.get("normalized_score", 0)
+                domain = item.get("domain", "")
+                date = item.get("date", "")
+                ai_impact = item.get("ai_impact", "")
+                
+                # 플랫폼별 색상
+                platform_colors = {
+                    "reddit": {"border": "#ff4500", "bg": "#1a1008"},
+                    "telegram": {"border": "#0088cc", "bg": "#081a2a"},
+                    "truthsocial": {"border": "#4a90d9", "bg": "#0a1a30"},
+                }
+                colors = platform_colors.get(platform, {"border": "#2d3548", "bg": "#1a1f2e"})
+                
+                # AI Impact 섹션 (AI 분석이 있는 경우만)
+                ai_html = ""
+                if ai_impact:
+                    ai_html = f"<p style='margin-top: 10px; margin-bottom: 0;'><strong style='color: #00d4aa;'>🤖 AI Impact:</strong> {ai_impact}</p>"
+                
+                card_html = f"""<div style='background-color: {colors["bg"]}; padding: 15px; border-radius: 8px; border: 1px solid {colors["border"]}; margin-bottom: 15px;'>
+<div style='display: flex; justify-content: space-between; align-items: center;'>
+<h4 style='margin: 0; color: #ffffff; flex: 1;'>{platform_icon} <a href='{url}' style='color: #ffffff; text-decoration: none;' target='_blank'>{title}</a></h4>
+<div style='display: flex; gap: 8px; align-items: center;'>
+<span style='background-color: {colors["border"]}; color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;'>{score_label}</span>
+<span style='background-color: #2d3548; color: #00d4aa; padding: 3px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold;'>Score: {normalized}</span>
+</div>
+</div>
+<p style='margin-top: 5px; margin-bottom: 0; color: #8892a4; font-size: 0.85rem;'>{domain} | {date}</p>
+{ai_html}
+</div>"""
+                st.markdown(card_html, unsafe_allow_html=True)
 
 
 elif menu == "M3 Short Squeeze":
