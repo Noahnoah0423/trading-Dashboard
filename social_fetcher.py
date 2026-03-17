@@ -133,7 +133,24 @@ def get_telegram_channel_posts(
             session_path = "/tmp/telegram_session"
             client_instance = TelegramClient(session_path, int(api_id), api_hash)
             
-        with client_instance as client:
+        client = client_instance
+        try:
+            client.connect()
+            
+            # 인증 확인 (무한 대기 및 Block 방지)
+            if not client.is_user_authorized():
+                 print("[WARNING] Telegram 세션 인증 만료")
+                 return [{
+                     "title": "⚠️ Telegram 세션이 만료되었습니다. generate_telegram_session.py를 다시 실행해 주세요.",
+                     "url": "#",
+                     "domain": "System",
+                     "platform": "telegram",
+                     "platform_icon": "⚠️",
+                     "raw_score": 0,
+                     "score_label": "WARN",
+                     "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                 }]
+            
             # 동결 방지: 무조건 지정 채널만 조회
             for channel_name in channels:
                 try:
@@ -176,6 +193,11 @@ def get_telegram_channel_posts(
                         "score_label": "WARN",
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M")
                     })
+        finally:
+            try:
+                client.disconnect()
+            except Exception:
+                pass
         
         results.sort(key=lambda x: x["raw_score"], reverse=True)
         
