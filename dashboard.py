@@ -883,7 +883,7 @@ elif menu == "Community Hot Topics":
             social_data = load_social_feed(reddit_creds, telegram_creds, truthsocial_creds, cache_key=unique_key)
         
         # 디버그 모드일 때 원본 데이터 출력
-        if 'show_debug' in locals() and show_debug:
+        if show_debug:
              st.write("🔧 [Debug] social_data:", social_data)
         
         if not social_data:
