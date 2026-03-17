@@ -877,9 +877,15 @@ elif menu == "Community Hot Topics":
                 except AttributeError:
                     st.experimental_rerun()
         
-        with st.spinner("SNS 커뮤니티 데이터를 수집 중..."):
-            unique_key = str(telegram_creds.get("string_session", "")) if telegram_creds else ""
-            social_data = load_social_feed(reddit_creds, telegram_creds, truthsocial_creds, cache_key=unique_key)
+        with st.spinner("SNS 커뮤니티 데이터 분석 중..."):
+            from social_fetcher import get_combined_social_feed
+            
+            # 무중단 실시간 로드 (캐시 우회)
+            social_data = get_combined_social_feed(
+                reddit_creds=reddit_creds,
+                telegram_creds=telegram_creds,
+                truthsocial_creds=truthsocial_creds
+            )
         
         if not social_data:
             st.info("수집된 커뮤니티 데이터가 없습니다. API 키를 확인해 주세요.")
