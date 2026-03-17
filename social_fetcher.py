@@ -158,7 +158,17 @@ def get_telegram_channel_posts(
         return []
     except Exception as e:
         print(f"[ERROR] Telegram 데이터 수집 실패: {e}")
-        return []
+        # 화면에 에러를 직관적으로 전달할 수 있도록 피드 형태로 오류 반환
+        return [{
+            "title": f"🚨 Telegram API 수집 오류: {str(e)}",
+            "url": "#",
+            "domain": "System",
+            "platform": "telegram",
+            "platform_icon": "⚠️",
+            "raw_score": 0,
+            "score_label": "ERROR",
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+        }]
 
 
 # ---------------------------------------------------------------------------
