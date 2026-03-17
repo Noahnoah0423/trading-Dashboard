@@ -319,7 +319,8 @@ def get_combined_social_feed(
         )
         all_posts.extend(reddit_posts)
     
-    # Telegram 수집
+    # Telegram 수집 (무한로딩 버그 수정을 위해 일시 주석 처리)
+    """
     if telegram_creds:
         telegram_posts = get_telegram_channel_posts(
             api_id=telegram_creds.get("api_id", ""),
@@ -327,6 +328,18 @@ def get_combined_social_feed(
             string_session=telegram_creds.get("string_session", ""),
         )
         all_posts.extend(telegram_posts)
+    """
+    if telegram_creds:
+         all_posts.append({
+             "title": "ℹ️ Telegram 수집 일시 비활성화: 무한로딩 장애 검독 중입니다.",
+             "url": "#",
+             "domain": "System",
+             "platform": "telegram",
+             "platform_icon": "✈️",
+             "raw_score": 0,
+             "score_label": "DEBUG",
+             "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+         })
     
     # Truth Social 수집
     if truthsocial_creds:
