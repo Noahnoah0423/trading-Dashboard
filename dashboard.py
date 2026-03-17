@@ -870,6 +870,10 @@ elif menu == "Community Hot Topics":
             if st.button("🔄 Refresh Community Feed"):
                 load_social_feed.clear()
                 load_social_ai_analysis.clear()
+                try:
+                    st.rerun()
+                except AttributeError:
+                    st.experimental_rerun()
         
         with st.spinner("SNS 커뮤니티 데이터를 수집 중..."):
             social_data = load_social_feed(reddit_creds, telegram_creds, truthsocial_creds)
