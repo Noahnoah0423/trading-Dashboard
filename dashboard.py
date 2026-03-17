@@ -877,15 +877,18 @@ elif menu == "Community Hot Topics":
                 except AttributeError:
                     st.experimental_rerun()
         
-        with st.spinner("SNS 커뮤니티 데이터를 수집 중..."):
-            # 세션 문자열이 바뀔 때 캐시가 갱신되도록 해시키 전달
-            unique_key = str(telegram_creds.get("string_session", "")) if telegram_creds else ""
-            social_data = load_social_feed(reddit_creds, telegram_creds, truthsocial_creds, cache_key=unique_key)
+        with st.spinner("SNS 커뮤니티 데이터를 실시간으로 수집 중..."):
+            from social_fetcher import get_combined_social_feed
             
-            # --- 안정적인 백엔드 로그 디버깅 ---
-            print(f"\n[AI_DASHBOARD_INFO] social_data length: {len(social_data)}")
-            if social_data:
-                 print(f"[AI_DASHBOARD_INFO] First item: {str(social_data[0].get('title', 'No Title'))[:60]}")
+            # 캐시 트랩을 우회하기 위해 인스턴스 직접 호출
+            social_data = get_combined_social_feed(
+                reddit_creds=reddit_creds,
+                telegram_creds=telegram_creds,
+                truthsocial_creds=truthsocial_creds
+            )
+            
+            # 후처리 및 진단 처리용 (디버그)
+            print(f"\n[AI_DASHBOARD_LIVE] social_data length: {len(social_data)}")
         
         if not social_data:
             st.info("수집된 커뮤니티 데이터가 없습니다. API 키를 확인해 주세요.")
