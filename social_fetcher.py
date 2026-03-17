@@ -157,6 +157,16 @@ def get_telegram_channel_posts(
                         })
                 except Exception as e:
                     print(f"[WARNING] Telegram 채널 '{channel_name}' 수집 실패: {e}")
+                    results.append({
+                        "title": f"⚠️ Telegram '{channel_name}' 채널 수집 실패: {str(e)}",
+                        "url": f"https://t.me/{channel_name}",
+                        "domain": "Telegram",
+                        "platform": "telegram",
+                        "platform_icon": "⚠️",
+                        "raw_score": 0,
+                        "score_label": "WARN",
+                        "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                    })
         
         results.sort(key=lambda x: x["raw_score"], reverse=True)
         return results
