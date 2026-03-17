@@ -109,7 +109,7 @@ def get_telegram_channel_posts(
         }]
     
     if channels is None:
-        channels = ["WallStreetBetsOfficial"]
+        channels = ["Cointelegraph", "binance_announcements"]
     
     try:
         # Telethon은 async이므로 동기 래퍼 사용
