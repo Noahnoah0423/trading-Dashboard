@@ -107,7 +107,15 @@ def get_telegram_channel_posts(
         # Telethon은 async이므로 동기 래퍼 사용
         from telethon.sync import TelegramClient
         from telethon.sessions import StringSession
+        import asyncio
         
+        # Streamlit 스레드에 대응하기 위한 이벤트 루프 생성/설정
+        try:
+            asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
         results = []
         
         # StringSession이 있으면 우선 사용 (인증 코드 불필요)
