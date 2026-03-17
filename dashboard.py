@@ -882,6 +882,10 @@ elif menu == "Community Hot Topics":
             unique_key = str(telegram_creds.get("string_session", "")) if telegram_creds else ""
             social_data = load_social_feed(reddit_creds, telegram_creds, truthsocial_creds, cache_key=unique_key)
         
+        # 디버그 모드일 때 원본 데이터 출력
+        if 'show_debug' in locals() and show_debug:
+             st.write("🔧 [Debug] social_data:", social_data)
+        
         if not social_data:
             st.info("수집된 커뮤니티 데이터가 없습니다. API 키를 확인해 주세요.")
         else:
