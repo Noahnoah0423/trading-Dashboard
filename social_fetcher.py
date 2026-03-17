@@ -112,64 +112,51 @@ def get_telegram_channel_posts(
         channels = ["Cointelegraph", "binance_announcements"]
     
     try:
-        # Telethon은 async이므로 동기 래퍼 사용
-        from telethon.sync import TelegramClient
-        from telethon.sessions import StringSession
         import asyncio
+        from telethon import TelegramClient
+        from telethon.sessions import StringSession
         
-        # Streamlit 스레드에 대응하기 위한 이벤트 루프 생성/설정
-        try:
-            asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+        # 내부 Async 함수 선언 - 데드락 및 무한 차단 완벽 방지
+        async def fetch_telegram():
+            if string_session:
+                client = TelegramClient(StringSession(string_session), int(api_id), api_hash)
+            else:
+                client = TelegramClient("/tmp/telegram_session", int(api_id), api_hash)
+                
+            await client.connect()
             
-        results = []
-        
-        # StringSession이 있으면 우선 사용 (인증 코드 불필요)
-        if string_session:
-            client_instance = TelegramClient(StringSession(string_session), int(api_id), api_hash)
-        else:
-            session_path = "/tmp/telegram_session"
-            client_instance = TelegramClient(session_path, int(api_id), api_hash)
-            
-        client = client_instance
-        try:
-            client.connect()
-            
-            # 인증 확인 (무한 대기 및 Block 방지)
-            if not client.is_user_authorized():
-                 print("[WARNING] Telegram 세션 인증 만료")
-                 return [{
-                     "title": "⚠️ Telegram 세션이 만료되었습니다. generate_telegram_session.py를 다시 실행해 주세요.",
-                     "url": "#",
-                     "domain": "System",
-                     "platform": "telegram",
-                     "platform_icon": "⚠️",
-                     "raw_score": 0,
-                     "score_label": "WARN",
-                     "date": datetime.now().strftime("%Y-%m-%d %H:%M")
-                 }]
-            
-            # 동결 방지: 무조건 지정 채널만 조회
+            # 인증 안되었을 때 블락 방지
+            if not await client.is_user_authorized():
+                print("[WARNING] Telegram 세션 인증이 만료되었습니다.")
+                await client.disconnect()
+                return [{
+                    "title": "⚠️ Telegram 세션이 만료되었습니다. generate_telegram_session.py를 다시 실행해 주세요.",
+                    "url": "#",
+                    "domain": "System",
+                    "platform": "telegram",
+                    "platform_icon": "⚠️",
+                    "raw_score": 0,
+                    "score_label": "WARN",
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                }]
+                
+            results = []
             for channel_name in channels:
                 try:
-                    channel = client.get_entity(channel_name)
-                    messages = client.get_messages(channel, limit=limit)
+                    entity = await client.get_entity(channel_name)
+                    messages = await client.get_messages(entity, limit=limit)
                     
                     for msg in messages:
                         if not msg.text or len(msg.text.strip()) < 10:
                             continue
-                        
-                        # 조회수 + 리액션 합산
+                            
                         views = msg.views or 0
                         reactions_count = 0
                         if hasattr(msg, 'reactions') and msg.reactions:
                             for r in msg.reactions.results:
                                 reactions_count += r.count
-                        
+                                
                         popularity = views + (reactions_count * 10)
-                        
                         results.append({
                             "title": msg.text[:120] + ("..." if len(msg.text) > 120 else ""),
                             "url": f"https://t.me/{channel_name}/{msg.id}",
@@ -182,9 +169,9 @@ def get_telegram_channel_posts(
                             "num_comments": reactions_count,
                         })
                 except Exception as e:
-                    print(f"[WARNING] Telegram 채널 '{channel_name}' 수집 실패: {e}")
+                    print(f"[WARNING] Telegram '{channel_name}' 채널 수집 실패: {e}")
                     results.append({
-                        "title": f"⚠️ Telegram '{channel_name}' 채널 수집 실패: {str(e)}",
+                        "title": f"⚠️ Telegram '{channel_name}' 채널 로딩 실패",
                         "url": f"https://t.me/{channel_name}",
                         "domain": "Telegram",
                         "platform": "telegram",
@@ -193,15 +180,21 @@ def get_telegram_channel_posts(
                         "score_label": "WARN",
                         "date": datetime.now().strftime("%Y-%m-%d %H:%M")
                     })
-        finally:
-            try:
-                client.disconnect()
-            except Exception:
-                pass
+            await client.disconnect()
+            return results
+
+        # 새 이벤트 루프를 생성하여 thread-safe 하게 실행
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            results = loop.run_until_complete(fetch_telegram())
+            loop.close()
+        except Exception as e:
+             print(f"[ERROR] Async 루프 오류: {e}")
+             return [{ "title": f"🚨 Telegram 수집 루프 장애: {e}", "platform": "telegram" }]
         
         results.sort(key=lambda x: x["raw_score"], reverse=True)
         
-        # 가져온 데이터가 없을 경우 진단 메시지 반환
         if not results:
              results.append({
                  "title": "ℹ️ Telegram 수집 결과 없음: 조건(최소 길이 등)을 만족하는 신규 메시지가 없습니다.",
@@ -213,7 +206,6 @@ def get_telegram_channel_posts(
                  "score_label": "INFO",
                  "date": datetime.now().strftime("%Y-%m-%d %H:%M")
              })
-             
         return results
         
     except ImportError:
@@ -319,8 +311,7 @@ def get_combined_social_feed(
         )
         all_posts.extend(reddit_posts)
     
-    # Telegram 수집 (무한로딩 버그 수정을 위해 일시 주석 처리)
-    """
+    # Telegram 수집 (활성화)
     if telegram_creds:
         telegram_posts = get_telegram_channel_posts(
             api_id=telegram_creds.get("api_id", ""),
@@ -328,18 +319,6 @@ def get_combined_social_feed(
             string_session=telegram_creds.get("string_session", ""),
         )
         all_posts.extend(telegram_posts)
-    """
-    if telegram_creds:
-         all_posts.append({
-             "title": "ℹ️ Telegram 수집 일시 비활성화: 무한로딩 장애 검독 중입니다.",
-             "url": "#",
-             "domain": "System",
-             "platform": "telegram",
-             "platform_icon": "✈️",
-             "raw_score": 0,
-             "score_label": "DEBUG",
-             "date": datetime.now().strftime("%Y-%m-%d %H:%M")
-         })
     
     # Truth Social 수집
     if truthsocial_creds:
