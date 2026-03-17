@@ -12,7 +12,6 @@ import numpy as np
 from typing import Dict, List, Any
 import requests
 import json
-import google.generativeai as genai
 import urllib.parse
 from datetime import datetime, timedelta
 import re
@@ -816,10 +815,13 @@ def analyze_liquidity_with_gemini(tga_df: pd.DataFrame, fed_df: pd.DataFrame, ap
         2. 위 3가지 관점을 종합하여, 최종적으로 현재 유동성 환경이 주식 시장(S&P500, Nasdaq)에 미칠 단기적 영향을 분석하세요.
         3. 결과는 한국어로 가독성 있게 마크다운 형식으로 작성하세요.
         """
+        from google import genai
         
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash') # 최신 모델로 복구
-        response = model.generate_content(prompt)
+        client = genai.Client(api_key=api_key)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt
+        )
         
         return response.text
         
