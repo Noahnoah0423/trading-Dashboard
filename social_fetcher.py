@@ -97,8 +97,16 @@ def get_telegram_channel_posts(
     첫 실행 시 인증코드 입력이 필요할 수 있습니다. (StringSession 사용 권장)
     """
     if not api_id or not api_hash:
-        print("[INFO] Telegram API 키가 설정되지 않았습니다. 빈 리스트 반환.")
-        return []
+        return [{
+            "title": f"⚠️ Telegram API 키 미인식: api_id={bool(api_id)}, api_hash={bool(api_hash)}",
+            "url": "#",
+            "domain": "Telegram",
+            "platform": "telegram",
+            "platform_icon": "⚠️",
+            "raw_score": 0,
+            "score_label": "WARN",
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+        }]
     
     if channels is None:
         channels = ["WallStreetBetsOfficial"]
@@ -169,6 +177,20 @@ def get_telegram_channel_posts(
                     })
         
         results.sort(key=lambda x: x["raw_score"], reverse=True)
+        
+        # 가져온 데이터가 없을 경우 진단 메시지 반환
+        if not results:
+             results.append({
+                 "title": "ℹ️ Telegram 수집 결과 없음: 조건(최소 길이 등)을 만족하는 신규 메시지가 없습니다.",
+                 "url": "#",
+                 "domain": "System",
+                 "platform": "telegram",
+                 "platform_icon": "ℹ️",
+                 "raw_score": 0,
+                 "score_label": "INFO",
+                 "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+             })
+             
         return results
         
     except ImportError:
