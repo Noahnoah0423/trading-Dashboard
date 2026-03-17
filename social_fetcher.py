@@ -109,7 +109,7 @@ def get_telegram_channel_posts(
         }]
     
     if channels is None:
-        channels = ["Cointelegraph", "binance_announcements"]
+        channels = ["@dialogs"] # 기본값: 내 가입 채널에서 자동 수집
     
     try:
         # Telethon은 async이므로 동기 래퍼 사용
@@ -134,10 +134,42 @@ def get_telegram_channel_posts(
             client_instance = TelegramClient(session_path, int(api_id), api_hash)
             
         with client_instance as client:
-            for channel_name in channels:
+            entities_to_fetch = []
+            
+            # --- 수집할 대상Entity 선정 ---
+            if channels == ["@dialogs"]:
                 try:
-                    channel = client.get_entity(channel_name)
-                    messages = client.get_messages(channel, limit=limit)
+                    dialogs = client.get_dialogs(limit=30)
+                    entities_to_fetch = [(d.entity, d.name) for d in dialogs if d.is_channel][:8]
+                except Exception as e:
+                    print(f"[WARNING] 대화방 목록 로드 실패: {e}")
+                    # 실패 시 예비 채널 기동
+                    channels = ["Cointelegraph", "binance_announcements"]
+                    
+            if not entities_to_fetch:
+                # 지정된 채널 이름으로 조회
+                actual_channels = channels if channels != ["@dialogs"] else ["Cointelegraph", "binance_announcements"]
+                for ch_name in actual_channels:
+                    try:
+                        entity = client.get_entity(ch_name)
+                        entities_to_fetch.append((entity, ch_name))
+                    except Exception as e:
+                        print(f"[WARNING] '{ch_name}' 엔티티 조회 실패: {e}")
+                        results.append({
+                            "title": f"⚠️ Telegram '{ch_name}' 채널 로드 실패: {str(e)}",
+                            "url": f"https://t.me/{ch_name}",
+                            "domain": "Telegram",
+                            "platform": "telegram",
+                            "platform_icon": "⚠️",
+                            "raw_score": 0,
+                            "score_label": "WARN",
+                            "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+                        })
+            
+            # --- 메시지 수집 실행 ---
+            for entity, channel_name in entities_to_fetch:
+                try:
+                    messages = client.get_messages(entity, limit=limit)
                     
                     for msg in messages:
                         if not msg.text or len(msg.text.strip()) < 10:
