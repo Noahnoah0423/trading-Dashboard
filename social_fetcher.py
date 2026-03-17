@@ -362,6 +362,19 @@ def get_combined_social_feed(
             continue
         seen_titles.add(title)
         filtered.append(post)
+        
+    # 만약 모든 글이 스팸 필터 등으로 걸러져서 비어있다면 안내글 추가
+    if not filtered:
+        filtered.append({
+            "title": f"ℹ️ 피드 내용 필터링됨: 총 {len(all_posts)}개의 글이 조건 미달(길이 등)로 제외되었습니다.",
+            "url": "#",
+            "domain": "System",
+            "platform": "telegram",
+            "platform_icon": "ℹ️",
+            "raw_score": 0,
+            "score_label": "INFO",
+            "date": datetime.now().strftime("%Y-%m-%d %H:%M")
+        })
     
     # --- 플랫폼별 Min-Max 정규화 ---
     platforms = set(p["platform"] for p in filtered)
