@@ -747,6 +747,10 @@ elif menu == "Intelligence Feed":
         with col_btn:
             if st.button("🔄 Refresh Feed"):
                 load_intelligence_feed.clear()
+                try:
+                    st.rerun()
+                except AttributeError:
+                    st.experimental_rerun()
         
         # 이미 위에서 로드된 intelligence_data 사용
         feed_data = intelligence_data
