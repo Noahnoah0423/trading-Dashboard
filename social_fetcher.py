@@ -85,6 +85,7 @@ def get_reddit_hot_posts(
 def get_telegram_channel_posts(
     api_id: str = "",
     api_hash: str = "",
+    string_session: str = "",
     channels: List[str] = None,
     limit: int = 10
 ) -> List[Dict[str, Any]]:
@@ -93,7 +94,7 @@ def get_telegram_channel_posts(
     Telethon 라이브러리 필요 (pip install telethon)
     
     주의: Streamlit Cloud에서는 세션 파일 유지가 어려워
-    첫 실행 시 인증코드 입력이 필요할 수 있습니다.
+    첫 실행 시 인증코드 입력이 필요할 수 있습니다. (StringSession 사용 권장)
     """
     if not api_id or not api_hash:
         print("[INFO] Telegram API 키가 설정되지 않았습니다. 빈 리스트 반환.")
@@ -105,12 +106,18 @@ def get_telegram_channel_posts(
     try:
         # Telethon은 async이므로 동기 래퍼 사용
         from telethon.sync import TelegramClient
+        from telethon.sessions import StringSession
         
         results = []
-        # Streamlit Cloud에서 세션 파일 경로 지정
-        session_path = "/tmp/telegram_session"
         
-        with TelegramClient(session_path, int(api_id), api_hash) as client:
+        # StringSession이 있으면 우선 사용 (인증 코드 불필요)
+        if string_session:
+            client_instance = TelegramClient(StringSession(string_session), int(api_id), api_hash)
+        else:
+            session_path = "/tmp/telegram_session"
+            client_instance = TelegramClient(session_path, int(api_id), api_hash)
+            
+        with client_instance as client:
             for channel_name in channels:
                 try:
                     channel = client.get_entity(channel_name)
@@ -244,6 +251,7 @@ def get_combined_social_feed(
         telegram_posts = get_telegram_channel_posts(
             api_id=telegram_creds.get("api_id", ""),
             api_hash=telegram_creds.get("api_hash", ""),
+            string_session=telegram_creds.get("string_session", ""),
         )
         all_posts.extend(telegram_posts)
     

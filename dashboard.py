@@ -315,14 +315,16 @@ try:
     if "TELEGRAM_API_ID" in st.secrets and st.secrets["TELEGRAM_API_ID"]:
         telegram_creds = {
             "api_id": st.secrets["TELEGRAM_API_ID"],
-            "api_hash": get_secret("TELEGRAM_API_HASH", "")
+            "api_hash": get_secret("TELEGRAM_API_HASH", ""),
+            "string_session": get_secret("TELEGRAM_STRING_SESSION", "")
         }
     elif "telegram" in st.secrets:
         sec_tel = st.secrets["telegram"]
         if "API_ID" in sec_tel:
             telegram_creds = {
                 "api_id": sec_tel["API_ID"],
-                "api_hash": sec_tel.get("API_HASH", "") if hasattr(sec_tel, "get") else sec_tel.get("API_HASH", "")
+                "api_hash": sec_tel.get("API_HASH", "") if hasattr(sec_tel, "get") else sec_tel.get("API_HASH", ""),
+                "string_session": sec_tel.get("STRING_SESSION", "") if hasattr(sec_tel, "get") else ""
             }
 
     # 2) Reddit
