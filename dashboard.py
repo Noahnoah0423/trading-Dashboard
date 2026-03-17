@@ -303,33 +303,62 @@ reddit_creds = None
 telegram_creds = None
 truthsocial_creds = None
 
-try:
-    if "REDDIT_CLIENT_ID" in st.secrets and st.secrets["REDDIT_CLIENT_ID"]:
-        reddit_creds = {
-            "client_id": st.secrets["REDDIT_CLIENT_ID"],
-            "client_secret": st.secrets.get("REDDIT_CLIENT_SECRET", ""),
-            "user_agent": st.secrets.get("REDDIT_USER_AGENT", "TradingDashboard/1.0"),
-        }
-except Exception:
-    pass
+# 정적 dict 처럼 다루기 위해 st.secrets를 dict로 안전하게 조작할 수 있는 보조 로직
+def get_secret(key, default=None):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return default
 
 try:
+    # 1) Telegram
     if "TELEGRAM_API_ID" in st.secrets and st.secrets["TELEGRAM_API_ID"]:
         telegram_creds = {
             "api_id": st.secrets["TELEGRAM_API_ID"],
-            "api_hash": st.secrets.get("TELEGRAM_API_HASH", ""),
+            "api_hash": get_secret("TELEGRAM_API_HASH", "")
         }
-except Exception:
-    pass
+    elif "telegram" in st.secrets:
+        sec_tel = st.secrets["telegram"]
+        if "API_ID" in sec_tel:
+            telegram_creds = {
+                "api_id": sec_tel["API_ID"],
+                "api_hash": sec_tel.get("API_HASH", "") if hasattr(sec_tel, "get") else sec_tel.get("API_HASH", "")
+            }
 
-try:
+    # 2) Reddit
+    if "REDDIT_CLIENT_ID" in st.secrets and st.secrets["REDDIT_CLIENT_ID"]:
+        reddit_creds = {
+            "client_id": st.secrets["REDDIT_CLIENT_ID"],
+            "client_secret": get_secret("REDDIT_CLIENT_SECRET", ""),
+            "user_agent": get_secret("REDDIT_USER_AGENT", "TradingDashboard/1.0"),
+        }
+    elif "reddit" in st.secrets:
+        sec_red = st.secrets["reddit"]
+        if "CLIENT_ID" in sec_red:
+            reddit_creds = {
+                "client_id": sec_red["CLIENT_ID"],
+                "client_secret": sec_red.get("CLIENT_SECRET", "") if hasattr(sec_red, "get") else "",
+                "user_agent": sec_red.get("USER_AGENT", "TradingDashboard/1.0") if hasattr(sec_red, "get") else "TradingDashboard/1.0"
+            }
+
+    # 3) Truth Social
     if "TRUTHSOCIAL_USERNAME" in st.secrets and st.secrets["TRUTHSOCIAL_USERNAME"]:
         truthsocial_creds = {
             "username": st.secrets["TRUTHSOCIAL_USERNAME"],
-            "password": st.secrets.get("TRUTHSOCIAL_PASSWORD", ""),
+            "password": get_secret("TRUTHSOCIAL_PASSWORD", "")
         }
-except Exception:
-    pass
+    elif "truthsocial" in st.secrets:
+        sec_truth = st.secrets["truthsocial"]
+        if "USERNAME" in sec_truth:
+            truthsocial_creds = {
+                "username": sec_truth["USERNAME"],
+                "password": sec_truth.get("PASSWORD", "") if hasattr(sec_truth, "get") else ""
+            }
+
+except Exception as e:
+    # 오류가 나더라도 connected 처리에서 걸러지도록 하고, 디버그용 출력
+    if show_debug:
+        st.sidebar.error(f"SNS Credential Error: {e}")
 
 
 # ===========================================================================
