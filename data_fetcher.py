@@ -748,18 +748,40 @@ def analyze_news_with_gemini(news_list, api_key):
         text_resp = response.text.strip()
         analysis_results = json.loads(text_resp)
         
-        # 원본 뉴스 리스트와 결합
+        # 원본 뉴스 리스트와 결합 (시간 가중치 적용)
+        current_time = datetime.utcnow()
+        
         analyzed_news = []
         for res in analysis_results:
             idx = res.get("index")
             if idx is not None and 0 <= idx < len(news_list):
                 original = news_list[idx]
+                
+                date_str = original.get("date", original.get("seendate", "Unknown"))
+                base_score = res.get("score", 0)
+                adjusted_score = base_score
+                
+                try:
+                    target_dt = pd.to_datetime(date_str, errors='coerce')
+                    if pd.notna(target_dt):
+                        # Calculate age in hours
+                        if target_dt.tzinfo is not None:
+                            # 타임존이 포함된 경우 단순 비교를 위해 나이브하게 변환하거나 tzinfo 제거
+                            target_dt = target_dt.replace(tzinfo=None)
+                            
+                        age_hours = (current_time - target_dt).total_seconds() / 3600
+                        if age_hours > 0:
+                            decay_factor = 0.5 ** (age_hours / 72) # 반감기 3일 (72시간)
+                            adjusted_score = int(round(base_score * decay_factor))
+                except Exception as e:
+                    print(f"[WARNING] Date decay calculation error: {e}")
+                
                 analyzed_news.append({
                     "title": original["title"],
                     "url": original["url"],
                     "domain": original["domain"],
-                    "date": original.get("date", original.get("seendate", "Unknown")),
-                    "score": res.get("score", 0),
+                    "date": date_str,
+                    "score": adjusted_score,  # 시간 비례 가중치 적용
                     "sentiment": res.get("sentiment", "NEUTRAL"),
                     "category": res.get("category", "General"),
                     "investment_angle": res.get("investment_angle", "No insight provided."),
